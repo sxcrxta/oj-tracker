@@ -53,6 +53,7 @@ $('sign-out').addEventListener('click', async () => { await send('signOut'); sho
 $('sync-now').addEventListener('click', async () => {
   $('sync-now').disabled = true;
   await send('flush');
+  await send('inject'); // 스크립트가 없는 탭이 있으면 넣어준다
   const tabs = await chrome.tabs.query({ url: 'https://dshs.app/*' });
   const results = await Promise.all(
     tabs.map((t) => chrome.tabs.sendMessage(t.id, { type: 'syncNow' }).catch(() => null)),

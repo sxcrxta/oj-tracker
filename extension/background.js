@@ -122,6 +122,17 @@ function flashBadge() {
   setTimeout(() => chrome.action.setBadgeText({ text: '' }), 4000);
 }
 
+// 설치/업데이트 전부터 열려 있던 탭에는 content script가 없으므로 직접 넣어준다.
+async function injectIntoOpenTabs() {
+  for (const cs of chrome.runtime.getManifest().content_scripts || []) {
+    const tabs = await chrome.tabs.query({ url: cs.matches });
+    await Promise.all(tabs.map((tab) =>
+      chrome.scripting.executeScript({ target: { tabId: tab.id }, files: cs.js }).catch(() => {})));
+  }
+}
+chrome.runtime.onInstalled.addListener(injectIntoOpenTabs);
+chrome.runtime.onStartup.addListener(injectIntoOpenTabs);
+
 chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'flush') flushOutbox(); });
 
 const handlers = {
@@ -129,12 +140,14 @@ const handlers = {
   signIn: async ({ email, password }) => {
     const d = await authRequest('token?grant_type=password', { email, password });
     const s = await startSession(d);
+    injectIntoOpenTabs();
     return { email: s.user.email };
   },
   signUp: async ({ email, password }) => {
     const d = await authRequest('signup', { email, password });
     if (!d.access_token) return { needsConfirm: true };
     const s = await startSession(d);
+    injectIntoOpenTabs();
     return { email: s.user.email };
   },
   signOut: async () => {
@@ -158,6 +171,7 @@ const handlers = {
     };
   },
   flush: () => flushOutbox(),
+  inject: () => injectIntoOpenTabs(),
 };
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {

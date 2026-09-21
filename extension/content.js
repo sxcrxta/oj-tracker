@@ -1,6 +1,12 @@
 // 채점 사이트 페이지 안에서 돌면서, 새로 채점이 끝난 내 제출을 찾아 background로 보낸다.
 // 사이트 API는 로그인 쿠키가 필요하므로 페이지와 같은 출처인 content script에서 호출한다.
 (() => {
+  // 확장 프로그램을 설치/업데이트하면 열려 있던 탭에도 다시 주입된다.
+  // 이전 인스턴스가 아직 살아 있으면 중복 실행하지 않는다.
+  const alive = () => !!chrome.runtime?.id;
+  if (globalThis.__OJ_TRACKER__?.alive()) return;
+  globalThis.__OJ_TRACKER__ = { alive };
+
   const adapters = globalThis.OJ_ADAPTERS || [];
   const MAX_PAGES = 5;
   const BURST_INTERVAL_MS = 3000;
@@ -67,6 +73,11 @@
   }
 
   function sync() {
+    if (!alive()) { // 확장 프로그램이 새로 로드되면 이 인스턴스는 멈춘다
+      clearInterval(idleTimer);
+      clearTimeout(burstTimer);
+      return Promise.resolve({ saved: 0, pending: false });
+    }
     running ||= syncOnce()
       .catch((e) => { console.warn('[OJ 기록기]', e); return { saved: 0, pending: false }; })
       .finally(() => { running = null; });
@@ -101,7 +112,7 @@
     if (document.visibilityState === 'visible') sync();
   });
 
-  setInterval(() => {
+  const idleTimer = setInterval(() => {
     if (document.visibilityState === 'visible') sync();
   }, IDLE_INTERVAL_MS);
 

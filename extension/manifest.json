@@ -1,9 +1,13 @@
 {
   "manifest_version": 3,
   "name": "OJ 제출 기록기",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "dshs.app 온라인 저지에 제출한 코드와 채점 결과를 자동으로 저장합니다.",
-  "permissions": ["storage", "alarms"],
+  "permissions": [
+    "storage",
+    "alarms",
+    "scripting"
+  ],
   "host_permissions": [
     "https://dshs.app/*",
     "https://uciyqapuzugedebycbmz.supabase.co/*"
@@ -14,8 +18,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://dshs.app/*"],
-      "js": ["adapters/dshs.js", "content.js"],
+      "matches": [
+        "https://dshs.app/*"
+      ],
+      "js": [
+        "adapters/dshs.js",
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],

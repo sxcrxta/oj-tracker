@@ -68,5 +68,6 @@
     },
   };
 
-  (globalThis.OJ_ADAPTERS ||= []).push(adapter);
+  // 다시 주입될 때 같은 어댑터가 두 번 등록되지 않게 교체한다.
+  globalThis.OJ_ADAPTERS = [...(globalThis.OJ_ADAPTERS || []).filter((a) => a.judge !== adapter.judge), adapter];
 })();
