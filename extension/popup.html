@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>OJ 제출 기록기</h1>
+  </header>
+
+  <section id="auth" hidden>
+    <p class="muted">대시보드와 같은 계정으로 로그인하세요. 로그인한 뒤에 제출하는 코드부터 저장됩니다.</p>
+    <form id="auth-form">
+      <input id="email" type="email" placeholder="이메일" autocomplete="email" required>
+      <input id="password" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password" minlength="6" required>
+      <div class="row">
+        <button type="submit" id="sign-in" class="primary">로그인</button>
+        <button type="button" id="sign-up">회원가입</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="main" hidden>
+    <dl>
+      <dt>계정</dt><dd id="who"></dd>
+      <dt>기록 시작</dt><dd id="since"></dd>
+      <dt>저장한 제출</dt><dd id="count"></dd>
+      <dt>최근 저장</dt><dd id="last"></dd>
+    </dl>
+    <p id="queued" class="warn" hidden></p>
+    <div class="row">
+      <button id="open-dashboard" class="primary">대시보드 열기</button>
+      <button id="sync-now">지금 동기화</button>
+    </div>
+    <button id="sign-out" class="link">로그아웃</button>
+  </section>
+
+  <p id="msg" class="msg" hidden></p>
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

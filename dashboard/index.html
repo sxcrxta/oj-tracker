@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OJ 제출 기록</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>OJ 제출 기록</h1>
+    <div id="account" hidden>
+      <span id="who" class="muted"></span>
+      <button id="sign-out" class="ghost">로그아웃</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="login" class="card narrow" hidden>
+      <h2>로그인</h2>
+      <p class="muted">확장 프로그램에서 쓰는 계정과 같은 계정으로 로그인하세요.</p>
+      <form id="login-form">
+        <input id="email" type="email" placeholder="이메일" autocomplete="email" required>
+        <input id="password" type="password" placeholder="비밀번호" autocomplete="current-password" minlength="6" required>
+        <div class="row">
+          <button type="submit" class="primary">로그인</button>
+          <button type="button" id="sign-up">회원가입</button>
+        </div>
+        <p id="login-msg" class="msg" hidden></p>
+      </form>
+    </section>
+
+    <section id="app" hidden>
+      <div class="stats" id="stats"></div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>문제별 기록</h2>
+          <input id="filter" type="search" placeholder="번호 또는 이름으로 찾기">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>문제</th><th>상태</th><th class="num">제출</th><th class="num">오답</th><th>최근 결과</th><th>최근 제출</th></tr>
+            </thead>
+            <tbody id="problems"></tbody>
+          </table>
+        </div>
+        <p id="empty" class="muted center" hidden>아직 저장된 제출이 없어요. 확장 프로그램에 로그인한 뒤 문제를 제출해 보세요.</p>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="detail">
+    <div class="dialog-head">
+      <h2 id="detail-title"></h2>
+      <button class="ghost" id="detail-close" aria-label="닫기">✕</button>
+    </div>
+    <div class="detail-body">
+      <ol id="attempts" class="attempts"></ol>
+      <div id="attempt-view" class="attempt-view"></div>
+    </div>
+  </dialog>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
