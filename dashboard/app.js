@@ -16,15 +16,39 @@ const VERDICT_COLORS = {
   Accepted: 'var(--ac)', WrongAnswer: 'var(--wa)', TimeLimitExceeded: 'var(--tle)',
   MemoryLimitExceeded: 'var(--tle)', RuntimeError: 'var(--re)', CompilationError: 'var(--ce)',
 };
+// supabase/functions/_shared/analysis.js의 MISTAKE_TAGS와 같게 유지한다.
+const MISTAKE_TAGS = {
+  overflow: '자료형 범위(오버플로)', boundary: '경계값/인덱스', init: '초기화 누락', complexity: '시간복잡도',
+  io_format: '입출력 형식', misread: '문제 조건 오해', algorithm: '알고리즘 선택', implementation: '구현 실수',
+  compile: '컴파일/문법', runtime: '런타임(배열 범위, 0 나누기, 재귀 깊이)', precision: '실수 정밀도', other: '기타',
+};
+const ROUTE_REASONS = {
+  simple: '맞은 코드와 비교하면 되는 문제', unsolved: '아직 못 푼 문제',
+  multiple_verdicts: '틀린 종류가 여러 가지', big_change: '맞힐 때 코드를 많이 바꿈',
+};
 const LANG_HL = { cpp: 'cpp', c: 'c', python: 'python', py: 'python', java: 'java' };
 const JUDGE_PROBLEM_URL = { dshs: (id) => `https://dshs.app/oj/problem/${id}` };
+const WORKER_ONLINE_MS = 90_000;
+const RUNNING_TIMEOUT_MS = 5 * 60_000;
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const verdictName = (v) => VERDICTS[v] ?? v ?? '-';
 const verdictClass = (v) => (VERDICTS[v] ? `v v-${v}` : 'v v-other');
+const tagName = (t) => MISTAKE_TAGS[t] ?? t;
 const fmtTime = (t) => new Date(t).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' });
+const ago = (t) => {
+  const s = Math.round((Date.now() - Date.parse(t)) / 1000);
+  if (s < 60) return '방금';
+  if (s < 3600) return `${Math.floor(s / 60)}분 전`;
+  if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
+  return `${Math.floor(s / 86400)}일 전`;
+};
 
 let submissions = [];
+let analyses = [];
+let worker = null;
+let pollTimer = null;
+let openKey = null;
 
 // ---------- 인증 ----------
 function loginMsg(text, kind) {
@@ -48,55 +72,152 @@ $('sign-up').addEventListener('click', async () => {
 });
 $('sign-out').addEventListener('click', () => sb.auth.signOut());
 
+let loadedFor = null;
 sb.auth.onAuthStateChange((_event, session) => {
   const user = session?.user;
   $('login').hidden = !!user;
   $('app').hidden = !user;
   $('account').hidden = !user;
   $('who').textContent = user?.email ?? '';
-  if (user) load();
-  else submissions = [];
+  if (user && loadedFor !== user.id) { loadedFor = user.id; load(); }
+  if (!user) { loadedFor = null; submissions = []; analyses = []; clearTimeout(pollTimer); }
 });
 
 // ---------- 데이터 ----------
 const LIST_COLUMNS = 'judge,submission_id,problem_id,problem_title,contest_id,language,status,verdict,max_time_ms,max_memory_kb,failed_testcase,submitted_at';
 
-async function load() {
+async function selectAll(query) {
   const rows = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await sb.from('submissions').select(LIST_COLUMNS)
-      .order('submitted_at', { ascending: true }).range(from, from + 999);
-    if (error) { alert(`불러오기 실패: ${error.message}`); return; }
+    const { data, error } = await query().range(from, from + 999);
+    if (error) throw error;
     rows.push(...data);
-    if (data.length < 1000) break;
+    if (data.length < 1000) return rows;
   }
-  submissions = rows;
+}
+
+async function load() {
+  try {
+    [submissions, analyses] = await Promise.all([
+      selectAll(() => sb.from('submissions').select(LIST_COLUMNS).order('submitted_at', { ascending: true })),
+      loadAnalyses(),
+    ]);
+    worker = (await sb.from('claude_workers').select('*').maybeSingle()).data;
+  } catch (e) {
+    alert(`불러오기 실패: ${e.message}`);
+    return;
+  }
   render();
 }
 
-// 문제별로 묶는다. (분석 기능을 붙일 때도 이 구조를 쓴다)
-function groupByProblem(rows) {
+const loadAnalyses = () => selectAll(() => sb.from('analyses').select('*').order('created_at', { ascending: true }));
+
+// 분석이 진행 중이면 몇 초마다 새로 읽는다.
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  const busy = analyses.some((a) => (a.status === 'running' && Date.now() - Date.parse(a.updated_at) < RUNNING_TIMEOUT_MS)
+    || (a.status === 'queued' && workerOnline()));
+  if (!busy) return;
+  pollTimer = setTimeout(async () => {
+    try {
+      analyses = await loadAnalyses();
+      worker = (await sb.from('claude_workers').select('*').maybeSingle()).data;
+    } catch { /* 다음 주기에 다시 시도 */ }
+    render();
+  }, 5000);
+}
+
+const workerOnline = () => worker && Date.now() - Date.parse(worker.last_seen) < WORKER_ONLINE_MS;
+
+// 문제별로 묶고, 가장 최근 분석을 붙인다.
+function groupByProblem() {
   const map = new Map();
-  for (const s of rows) {
+  for (const s of submissions) {
     const key = `${s.judge}:${s.problem_id}`;
     if (!map.has(key)) map.set(key, { key, judge: s.judge, id: s.problem_id, title: s.problem_title, list: [] });
     const p = map.get(key);
     p.list.push(s);
     if (s.problem_title) p.title = s.problem_title;
   }
+  const latest = new Map();
+  for (const a of analyses) if (a.kind === 'problem') latest.set(`${a.judge}:${a.problem_id}`, a);
   for (const p of map.values()) {
     p.solved = p.list.some((s) => s.verdict === 'Accepted');
     p.wrong = p.list.filter((s) => s.verdict !== 'Accepted').length;
     p.last = p.list[p.list.length - 1];
+    p.analysis = latest.get(p.key) ?? null;
+    p.state = analysisState(p);
   }
   return [...map.values()].sort((a, b) => Date.parse(b.last.submitted_at) - Date.parse(a.last.submitted_at));
 }
 
+// 서버의 route()와 같은 기준을 제출 결과만으로 미리 본다. (코드 변경량 기준은 서버가 판단)
+function predictEngine(p) {
+  const firstAc = p.list.findIndex((s) => s.verdict === 'Accepted');
+  const wrong = p.list.filter((s) => s.verdict !== 'Accepted');
+  if (!wrong.length || (firstAc >= 0 && !p.list.slice(0, firstAc).some((s) => s.verdict !== 'Accepted'))) return null;
+  if (firstAc < 0 || new Set(wrong.map((s) => s.verdict)).size > 1) return 'claude';
+  return 'gemma';
+}
+
+// 표에 보여줄 분석 상태
+function analysisState(p) {
+  const a = p.analysis;
+  const current = p.list.map((s) => s.submission_id);
+  const stale = a && current.some((id) => !a.submission_ids.includes(id));
+  if (!a) {
+    const engine = predictEngine(p);
+    if (!engine) return { id: 'first_try', label: '분석할 오답 없음', cls: 'muted' };
+    if (engine === 'claude' && !worker) return { id: 'needs_claude', label: 'Claude 분석 필요', cls: 'claude' };
+    return { id: 'new', label: '분석 전', cls: 'muted', canRun: true, engine };
+  }
+  if (a.status === 'skipped') {
+    const label = a.route_reason === 'empty_attempt' ? '빈 코드만 틀림' : '분석할 오답 없음';
+    return { id: 'first_try', label, cls: 'muted', stale, canRun: stale, reason: a.route_reason };
+  }
+  if (a.status === 'running' && Date.now() - Date.parse(a.updated_at) > RUNNING_TIMEOUT_MS) {
+    return { id: 'error', label: '시간 초과', cls: 'err', canRun: true };
+  }
+  if (a.status === 'running') return { id: 'running', label: '분석 중…', cls: 'busy' };
+  if (a.status === 'queued') return { id: 'queued', label: workerOnline() ? 'Claude 분석 중…' : 'Claude 워커 대기', cls: workerOnline() ? 'busy' : 'claude' };
+  if (a.status === 'needs_claude') return { id: 'needs_claude', label: 'Claude 분석 필요', cls: 'claude', canRun: stale || !!worker };
+  if (a.status === 'error') return { id: 'error', label: '분석 실패', cls: 'err', canRun: true };
+  return {
+    id: 'done', label: a.engine === 'claude' ? 'Claude 분석' : 'Gemma 분석', cls: a.engine,
+    stale, canRun: stale,
+  };
+}
+
+async function requestAnalysis(body) {
+  const { data, error } = await sb.functions.invoke('analyze', { body });
+  if (error) {
+    let msg = error.message;
+    try { msg = (await error.context.json()).error ?? msg; } catch {}
+    throw new Error(msg);
+  }
+  return data;
+}
+
+async function analyzeProblem(p) {
+  const row = await requestAnalysis({ kind: 'problem', judge: p.judge, problem_id: p.id });
+  if (row.id) analyses.push(row);
+  render();
+  return row;
+}
+
 // ---------- 화면 ----------
 function render() {
-  const problems = groupByProblem(submissions);
+  const problems = groupByProblem();
   renderStats(problems);
+  renderClaude(problems);
+  renderOverall(problems);
+  renderMistakes(problems);
   renderProblems(problems);
+  if (openKey && $('detail').open) {
+    const p = problems.find((x) => x.key === openKey);
+    if (p && detailSig(p) !== shownSig) refreshDetail(p);
+  }
+  schedulePoll();
 }
 
 function renderStats(problems) {
@@ -121,6 +242,102 @@ function renderStats(problems) {
     </div>`;
 }
 
+function renderClaude(problems) {
+  const waiting = problems.filter((p) => ['needs_claude', 'queued'].includes(p.state.id)).length;
+  let html;
+  if (!worker) {
+    html = `<span class="pill claude">Claude 미연결</span>
+      <span>기본 분석은 Gemma(무료)가 해요. 못 푼 문제나 원인이 여러 개인 문제는 Claude가 필요해요${waiting ? ` (지금 ${waiting}문제)` : ''}.</span>
+      <details class="howto"><summary>Claude 연결 방법</summary>
+        <ol>
+          <li>Claude Code를 설치하고 로그인해요. (Claude 구독 필요)</li>
+          <li>저장소의 <code>analyzer</code> 폴더에서 <code>node worker.js login</code>으로 이 계정에 로그인해요.</li>
+          <li><code>node worker.js</code>로 워커를 켜두면, 어려운 문제는 내 컴퓨터의 Claude가 분석해요.</li>
+        </ol>
+      </details>`;
+  } else if (workerOnline()) {
+    html = `<span class="pill ok">Claude 연결됨</span><span class="muted">워커 ${esc(worker.model ?? '')} · ${ago(worker.last_seen)} 확인${waiting ? ` · 대기 ${waiting}개` : ''}</span>`;
+  } else {
+    html = `<span class="pill claude">Claude 워커 꺼짐</span><span class="muted">마지막 확인 ${ago(worker.last_seen)}${waiting ? ` · 워커를 켜면 ${waiting}문제를 분석해요` : ''} (<code>node worker.js</code>)</span>`;
+  }
+  $('claude-status').innerHTML = html;
+}
+
+function renderOverall(problems) {
+  const overall = analyses.filter((a) => a.kind === 'overall').at(-1);
+  const analyzed = problems.filter((p) => p.state.id === 'done').length;
+  const busy = overall && (overall.status === 'running' || overall.status === 'queued');
+  const btn = $('overall-run');
+  btn.disabled = !analyzed || busy;
+  btn.textContent = overall ? '다시 만들기' : '종합 리포트 만들기';
+  const body = $('overall-body');
+
+  if (!overall) {
+    body.innerHTML = `<p class="muted">${analyzed ? `분석된 ${analyzed}문제를 바탕으로 반복되는 약점을 정리해요.` : '문제별 분석이 하나 이상 끝나면 만들 수 있어요.'}</p>`;
+    return;
+  }
+  const engine = `<span class="pill ${esc(overall.engine)}">${overall.engine === 'claude' ? 'Claude' : 'Gemma'}</span>`;
+  if (busy) { body.innerHTML = `<p class="muted">${engine} 종합 리포트를 만드는 중…</p>`; return; }
+  if (overall.status === 'error') { body.innerHTML = `<p class="msg err">만들지 못했어요: ${esc(overall.error)}</p>`; return; }
+  const o = overall.result;
+  body.innerHTML = `
+    <p class="overview">${esc(o.overview)}</p>
+    <div class="weak-list">${o.top_weaknesses.map((w) => `
+      <div class="weak">
+        <div class="weak-head"><b>${esc(w.title)}</b><span class="tag">${esc(tagName(w.tag))}</span></div>
+        <p>${esc(w.description)}</p>
+        <p class="muted small">근거 ${w.problems.map((id) => `<a href="#" data-problem="${esc(id)}">#${esc(id)}</a>`).join(' ')}</p>
+        <p class="practice"><span class="label">연습</span>${esc(w.practice)}</p>
+      </div>`).join('')}
+    </div>
+    <div class="two">
+      <div><h3>잘하는 점</h3><ul>${o.strengths.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></div>
+      <div><h3>다음에 할 일</h3><ul>${o.next_steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></div>
+    </div>
+    <p class="muted small">${engine} ${fmtTime(overall.updated_at)} 기준</p>`;
+}
+
+$('overall-run').addEventListener('click', async () => {
+  $('overall-run').disabled = true;
+  try {
+    const row = await requestAnalysis({ kind: 'overall' });
+    analyses.push(row);
+  } catch (e) {
+    alert(e.message);
+  }
+  render();
+});
+$('overall-body').addEventListener('click', (e) => {
+  const a = e.target.closest('a[data-problem]');
+  if (!a) return;
+  e.preventDefault();
+  const p = groupByProblem().find((x) => x.id === a.dataset.problem);
+  if (p) openProblem(p);
+});
+
+// 분석된 문제들에서 틀린 제출별 실수 유형을 센다.
+function renderMistakes(problems) {
+  const counts = {};
+  const where = {};
+  for (const p of problems) {
+    if (p.state.id !== 'done') continue;
+    for (const a of p.analysis.result.attempts) {
+      counts[a.tag] = (counts[a.tag] || 0) + 1;
+      (where[a.tag] ||= new Set()).add(p.id);
+    }
+  }
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const max = entries[0]?.[1] || 1;
+  $('mistakes').innerHTML = entries.length
+    ? entries.map(([t, n]) => `
+      <div class="mrow" title="${esc([...where[t]].map((id) => `#${id}`).join(', '))}">
+        <span class="mname">${esc(tagName(t))}</span>
+        <span class="mbar"><span style="width:${(n / max) * 100}%"></span></span>
+        <span class="mnum">${n}</span>
+      </div>`).join('')
+    : '<p class="muted">분석이 끝난 문제가 생기면 틀린 제출마다 실수 유형을 모아 보여줘요.</p>';
+}
+
 function renderProblems(problems) {
   const q = $('filter').value.trim().toLowerCase();
   const shown = problems.filter((p) => !q || p.id.includes(q) || (p.title || '').toLowerCase().includes(q));
@@ -132,38 +349,122 @@ function renderProblems(problems) {
       <td class="num">${p.list.length}</td>
       <td class="num">${p.wrong}</td>
       <td class="${verdictClass(p.last.verdict)}">${esc(verdictName(p.last.verdict))}</td>
+      <td><span class="pill ${p.state.cls}">${esc(p.state.label)}</span>${p.state.stale ? ' <span class="pill muted">새 제출</span>' : ''}</td>
       <td class="muted">${fmtTime(p.last.submitted_at)}</td>
     </tr>`).join('');
   $('problems').onclick = (e) => {
     const tr = e.target.closest('tr[data-key]');
     if (tr) openProblem(problems.find((p) => p.key === tr.dataset.key));
   };
+
+  const todo = problems.filter((p) => p.state.canRun && p.state.id !== 'needs_claude' && p.state.id !== 'error'
+    && !(p.state.engine === 'claude' && !worker));
+  $('analyze-all').hidden = !todo.length;
+  $('analyze-all').textContent = `새 문제 ${todo.length}개 분석`;
+  $('analyze-all').onclick = () => analyzeMany(todo);
 }
-$('filter').addEventListener('input', () => renderProblems(groupByProblem(submissions)));
+$('filter').addEventListener('input', () => renderProblems(groupByProblem()));
+
+async function analyzeMany(list) {
+  $('analyze-all').disabled = true;
+  for (const p of list) {
+    try { await analyzeProblem(p); } catch (e) { alert(`#${p.id}: ${e.message}`); break; }
+    await new Promise((r) => setTimeout(r, 1500)); // 무료 모델 호출 제한을 피하려고 간격을 둔다
+  }
+  $('analyze-all').disabled = false;
+}
 
 // ---------- 문제 상세 ----------
 const codeCache = new Map();
 
 function openProblem(p) {
+  openKey = p.key;
   const url = JUDGE_PROBLEM_URL[p.judge]?.(p.id);
   $('detail-title').innerHTML = `<span class="pid">#${esc(p.id)}</span>${
     url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(p.title)}</a>` : esc(p.title)}`;
-  const list = [...p.list].reverse();
-  $('attempts').innerHTML = list.map((s, i) => `
-    <li data-i="${i}">
-      <div class="${verdictClass(s.verdict)}">${esc(verdictName(s.verdict))}${
-        s.failed_testcase ? ` <span class="sub">#${s.failed_testcase}</span>` : ''}</div>
-      <div class="sub">${fmtTime(s.submitted_at)} · ${s.max_time_ms ?? '-'}ms</div>
-    </li>`).join('');
-  $('attempts').onclick = (e) => {
-    const li = e.target.closest('li[data-i]');
-    if (li) showAttempt(list[+li.dataset.i], li);
-  };
-  $('detail').showModal();
-  showAttempt(list[0], $('attempts').firstElementChild);
+  if (!$('detail').open) $('detail').showModal();
+  refreshDetail(p, true);
 }
 
-async function showAttempt(s, li) {
+// 분석 결과가 바뀌면 열린 창도 다시 그린다. 보고 있던 항목은 유지한다.
+let shownSig = null;
+const detailSig = (p) => `${p.list.length}|${p.state.id}|${p.analysis?.id}|${p.analysis?.updated_at}`;
+function refreshDetail(p, reset = false) {
+  shownSig = detailSig(p);
+  const list = [...p.list].reverse();
+  const n = (s) => p.list.indexOf(s) + 1; // 분석 결과의 제출 번호 (오래된 순, 1부터)
+  const causes = new Map((p.state.id === 'done' ? p.analysis.result.attempts : []).map((a) => [a.n, a]));
+  const active = reset ? 'analysis' : ($('attempts').querySelector('li.active')?.dataset.i ?? 'analysis');
+
+  $('attempts').innerHTML = `
+    <li data-i="analysis"><div><b>분석</b></div><div class="sub"><span class="pill ${p.state.cls}">${esc(p.state.label)}</span></div></li>
+    ${list.map((s, i) => {
+      const c = causes.get(n(s));
+      return `<li data-i="${i}">
+        <div class="${verdictClass(s.verdict)}">제출 ${n(s)} · ${esc(verdictName(s.verdict))}${
+          s.failed_testcase ? ` <span class="sub">#${s.failed_testcase}</span>` : ''}</div>
+        <div class="sub">${fmtTime(s.submitted_at)} · ${s.max_time_ms ?? '-'}ms</div>
+        ${c ? `<div><span class="tag">${esc(tagName(c.tag))}</span></div>` : ''}
+      </li>`;
+    }).join('')}`;
+  $('attempts').onclick = (e) => {
+    const li = e.target.closest('li[data-i]');
+    if (!li) return;
+    if (li.dataset.i === 'analysis') showAnalysis(p, li);
+    else showAttempt(list[+li.dataset.i], li, causes.get(n(list[+li.dataset.i])), n(list[+li.dataset.i]));
+  };
+  const li = $('attempts').querySelector(`li[data-i="${active}"]`) ?? $('attempts').firstElementChild;
+  li.click();
+}
+
+function showAnalysis(p, li) {
+  [...$('attempts').children].forEach((el) => el.classList.toggle('active', el === li));
+  const view = $('attempt-view');
+  const a = p.analysis;
+  const st = p.state;
+  const runBtn = (label) => `<button class="primary" id="run-analysis">${label}</button>`;
+  let html;
+
+  if (st.id === 'first_try') {
+    html = st.reason === 'empty_attempt'
+      ? '<p class="muted">맞히기 전에 틀린 제출이 모두 빈 코드(뼈대만 있는 코드)라서 분석할 게 없어요.</p>'
+      : '<p class="muted">맞히기 전에 틀린 제출이 없어서 분석할 게 없어요.</p>';
+    if (st.stale) html += `<div class="callout">이 판단 뒤에 새 제출이 있어요. ${runBtn('다시 분석')}</div>`;
+  } else if (st.id === 'new') {
+    html = `<p>이 문제는 ${st.engine === 'claude' ? '<b>Claude</b>' : '<b>Gemma</b>(무료)'}가 분석해요.</p>${runBtn('분석하기')}`;
+  } else if (st.id === 'needs_claude') {
+    const reason = ROUTE_REASONS[a?.route_reason] ?? (p.solved ? '틀린 종류가 여러 가지' : '아직 못 푼 문제');
+    html = `<div class="callout claude"><b>Claude 분석 필요</b>
+      <p>${esc(reason)}라서 Gemma로는 원인을 믿을 만하게 찾기 어려워요. Gemma는 이런 문제에서 그럴듯하지만 틀린 원인을 확신 있게 내놓는 경향이 있었어요.</p>
+      <p class="muted">Claude를 연결하면 자동으로 분석돼요. 방법은 대시보드 위쪽의 "Claude 연결 방법"을 보세요.</p></div>
+      ${st.canRun ? runBtn(worker ? 'Claude로 분석하기' : '다시 확인') : ''}`;
+  } else if (st.id === 'running' || st.id === 'queued') {
+    html = `<p class="muted">${esc(st.label)} ${a.engine === 'gemma' ? 'Gemma는 30초~2분쯤 걸려요.' : ''}</p>`;
+  } else if (st.id === 'error') {
+    html = `<p class="msg err">분석하지 못했어요${a?.error ? `: ${esc(a.error)}` : ''}</p>${runBtn('다시 분석')}`;
+  } else {
+    const o = a.result;
+    const conf = { high: '높음', medium: '중간', low: '낮음' }[o.confidence];
+    html = `
+      <div class="meta"><span class="pill ${esc(a.engine)}">${a.engine === 'claude' ? 'Claude' : 'Gemma'}</span>
+        <span>확신 <b>${conf}</b></span><span>${fmtTime(a.updated_at)}</span></div>
+      ${st.stale ? `<div class="callout">이 분석 뒤에 새 제출이 있어요. ${runBtn('다시 분석')}</div>` : ''}
+      <p class="overview">${esc(o.summary)}</p>
+      <h3>틀린 제출별 원인</h3>
+      <ul class="causes">${o.attempts.map((c) => `<li><span class="mono muted">제출 ${c.n}</span> <span class="tag">${esc(tagName(c.tag))}</span><br>${esc(c.cause)}</li>`).join('')}</ul>
+      <h3>맞게 된 수정</h3><p>${o.fix_point ? esc(o.fix_point) : '<span class="muted">아직 못 풂</span>'}</p>
+      <h3>드러난 약점</h3>
+      <ul class="causes">${o.weak_points.map((w) => `<li><span class="tag">${esc(tagName(w.tag))}</span>${esc(w.description)}</li>`).join('')}</ul>
+      <h3>다음에 확인할 것</h3><p>${esc(o.advice)}</p>`;
+  }
+  view.innerHTML = html;
+  $('run-analysis')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    try { await analyzeProblem(p); } catch (err) { alert(err.message); e.target.disabled = false; }
+  });
+}
+
+async function showAttempt(s, li, cause, n) {
   [...$('attempts').children].forEach((el) => el.classList.toggle('active', el === li));
   const view = $('attempt-view');
   const key = `${s.judge}:${s.submission_id}`;
@@ -177,7 +478,7 @@ async function showAttempt(s, li) {
     full = data;
     codeCache.set(key, full);
   }
-  if (!li.classList.contains('active')) return; // 그 사이 다른 제출을 눌렀다
+  if (!li.classList.contains('active')) return; // 그 사이 다른 항목을 눌렀다
 
   const tcs = full.testcase_results || [];
   const lang = LANG_HL[s.language] ?? 'plaintext';
@@ -188,7 +489,7 @@ async function showAttempt(s, li) {
 
   view.innerHTML = `
     <div class="meta">
-      <span class="${verdictClass(s.verdict)}">${esc(verdictName(s.verdict))}</span>
+      <span class="${verdictClass(s.verdict)}">제출 ${n} · ${esc(verdictName(s.verdict))}</span>
       <span>언어 <b>${esc(s.language ?? '-')}</b></span>
       <span>시간 <b>${s.max_time_ms ?? '-'}ms</b></span>
       <span>메모리 <b>${s.max_memory_kb != null ? Math.round(s.max_memory_kb / 1024) + 'MB' : '-'}</b></span>
@@ -196,6 +497,7 @@ async function showAttempt(s, li) {
       ${s.contest_id ? `<span>대회 <b>${esc(s.contest_id)}</b></span>` : ''}
       <span>${fmtTime(s.submitted_at)}</span>
     </div>
+    ${cause ? `<div class="callout"><span class="tag">${esc(tagName(cause.tag))}</span>${esc(cause.cause)}</div>` : ''}
     ${tcs.length ? `<h3>테스트케이스</h3><div class="tc">${tcs.map((t) =>
       `<span class="${verdictClass(t.verdict)}" title="${esc(verdictName(t.verdict))} · ${t.time_ms}ms">#${t.index + 1}</span>`).join('')}</div>` : ''}
     ${full.compile_output ? `<h3>채점 메시지</h3><pre class="plain">${esc(full.compile_output)}</pre>` : ''}
@@ -205,3 +507,4 @@ async function showAttempt(s, li) {
 
 $('detail-close').addEventListener('click', () => $('detail').close());
 $('detail').addEventListener('click', (e) => { if (e.target === $('detail')) $('detail').close(); });
+$('detail').addEventListener('close', () => { openKey = null; });

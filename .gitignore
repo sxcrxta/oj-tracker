@@ -5,3 +5,4 @@ node_modules
 analyzer/results/
 analyzer/data/
 analyzer/*.log
+supabase/.temp/

@@ -34,15 +34,34 @@
     <section id="app" hidden>
       <div class="stats" id="stats"></div>
 
+      <div class="claude-status" id="claude-status"></div>
+
+      <div class="insight">
+        <div class="card">
+          <div class="card-head">
+            <h2>종합 리포트</h2>
+            <button id="overall-run" class="primary">종합 리포트 만들기</button>
+          </div>
+          <div id="overall-body"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>자주 하는 실수</h2></div>
+          <div id="mistakes"></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-head">
           <h2>문제별 기록</h2>
-          <input id="filter" type="search" placeholder="번호 또는 이름으로 찾기">
+          <div class="row-inline">
+            <button id="analyze-all" hidden></button>
+            <input id="filter" type="search" placeholder="번호 또는 이름으로 찾기">
+          </div>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>문제</th><th>상태</th><th class="num">제출</th><th class="num">오답</th><th>최근 결과</th><th>최근 제출</th></tr>
+              <tr><th>문제</th><th>상태</th><th class="num">제출</th><th class="num">오답</th><th>최근 결과</th><th>분석</th><th>최근 제출</th></tr>
             </thead>
             <tbody id="problems"></tbody>
           </table>

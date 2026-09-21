@@ -28,7 +28,7 @@ async function startSession(data) {
   await chrome.storage.local.set({
     session,
     trackingSince: sameUser && trackingSince ? trackingSince : Date.now(),
-    ...(sameUser ? {} : { synced: {}, outbox: [], savedCount: 0, lastSaved: null }),
+    ...(sameUser ? {} : { synced: {}, outbox: [], savedCount: 0, lastSaved: null, problemsSaved: {} }),
   });
   return session;
 }
@@ -53,9 +53,9 @@ async function getSession() {
   return refreshing;
 }
 
-async function upsert(record, session) {
+async function upsert(record, session, table = 'submissions', conflict = 'owner_id,judge,submission_id') {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/submissions?on_conflict=owner_id,judge,submission_id`,
+    `${SUPABASE_URL}/rest/v1/${table}?on_conflict=${conflict}`,
     {
       method: 'POST',
       headers: {
@@ -135,8 +135,17 @@ chrome.runtime.onStartup.addListener(injectIntoOpenTabs);
 
 chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'flush') flushOutbox(); });
 
+async function saveProblem(problem) {
+  const session = await getSession().catch(() => null);
+  if (!session) throw new Error('로그인이 필요합니다');
+  await upsert({ ...problem, fetched_at: new Date().toISOString() }, session, 'problems', 'owner_id,judge,problem_id');
+  const { problemsSaved = {} } = await chrome.storage.local.get('problemsSaved');
+  await chrome.storage.local.set({ problemsSaved: { ...problemsSaved, [`${problem.judge}:${problem.problem_id}`]: Date.now() } });
+}
+
 const handlers = {
   save: ({ record }) => save(record),
+  saveProblem: ({ problem }) => saveProblem(problem),
   signIn: async ({ email, password }) => {
     const d = await authRequest('token?grant_type=password', { email, password });
     const s = await startSession(d);

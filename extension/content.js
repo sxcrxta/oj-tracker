@@ -30,13 +30,14 @@
     const adapter = adapters.find((a) => a.matches(location));
     if (!adapter) return { saved: 0, pending: false };
 
-    const { session, trackingSince, synced = {} } =
-      await chrome.storage.local.get(['session', 'trackingSince', 'synced']);
+    const { session, trackingSince, synced = {}, problemsSaved = {} } =
+      await chrome.storage.local.get(['session', 'trackingSince', 'synced', 'problemsSaved']);
     if (!session || !trackingSince) return { saved: 0, pending: false };
 
     let saved = 0;
     let pending = false;
     const seen = new Set();
+    const problemIds = new Set();
 
     for (const src of adapter.listSources(location)) {
       for (let page = 1; page <= MAX_PAGES; page++) {
@@ -52,6 +53,7 @@
         for (const item of items) {
           const id = adapter.itemId(item);
           if (adapter.itemTime(item) < trackingSince) { reachedOld = true; continue; }
+          if (adapter.isMine(item)) problemIds.add(adapter.problemId(item));
           if (!adapter.isMine(item) || seen.has(id) || synced[syncedKey(adapter.judge, id)]) continue;
           seen.add(id);
           if (!adapter.isFinal(item)) { pending = true; continue; }
@@ -69,7 +71,23 @@
         if (reachedOld || lastPage) break;
       }
     }
+    await saveProblems(adapter, problemIds, problemsSaved);
     return { saved, pending };
+  }
+
+  // 분석에 쓸 문제 설명을 저장한다. 문제 내용이 바뀔 수 있어서 일주일마다 다시 받는다.
+  const PROBLEM_REFRESH_MS = 7 * 24 * 3600 * 1000;
+  async function saveProblems(adapter, ids, problemsSaved) {
+    for (const id of ids) {
+      const key = `${adapter.judge}:${id}`;
+      if (Date.now() - (problemsSaved[key] || 0) < PROBLEM_REFRESH_MS) continue;
+      try {
+        const problem = adapter.toProblem(await getJson(adapter.problemUrl(id)));
+        await chrome.runtime.sendMessage({ type: 'saveProblem', problem });
+      } catch (e) {
+        console.warn('[OJ 기록기] 문제 저장 실패', id, e);
+      }
+    }
   }
 
   function sync() {

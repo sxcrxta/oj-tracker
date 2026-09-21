@@ -39,6 +39,36 @@
     isMine: (item) => item.mine !== false,
     isFinal: (item) => !!item.status && !PENDING.has(item.status) && !!item.verdict,
 
+    problemId: (item) => String(item.problemId),
+    problemUrl: (id) => `/api/oj/problems/${encodeURIComponent(id)}`,
+
+    // 문제 설명은 서식 있는 문서(ProseMirror JSON)라 글자만 뽑는다. 그림은 옮길 수 없어서 있다는 표시만 남긴다.
+    toProblem(d) {
+      let hasImages = false;
+      const text = (n) => {
+        if (!n) return '';
+        if (n.type === 'text') return n.text || '';
+        if (n.type === 'image') { hasImages = true; return '[그림]'; }
+        const latex = n.attrs?.latex ?? (n.content ? null : n.attrs?.content);
+        if (latex) return `$${latex}$`;
+        const inner = (n.content || []).map(text).join('');
+        return ['paragraph', 'heading', 'listItem', 'codeBlock', 'blockquote'].includes(n.type) ? `${inner}\n` : inner;
+      };
+      const statement = typeof d.statement === 'string' ? d.statement : text(d.statement).trim();
+      return {
+        judge: 'dshs',
+        problem_id: String(d.id),
+        title: d.title ?? null,
+        statement,
+        statement_has_images: hasImages || (d.statementFiles?.length ?? 0) > 0,
+        examples: (d.examples || []).map((e) => ({ input: e.input, output: e.output })),
+        time_limit_ms: d.timeLimitMs ?? null,
+        memory_limit_kb: d.memoryLimitKb ?? null,
+        testcase_count: d.testcaseCount ?? null,
+        tags: d.tags || [],
+      };
+    },
+
     toRecord(d, src) {
       const tcs = Array.isArray(d.testcaseResults) ? d.testcaseResults : [];
       const failed = tcs.find((t) => t.verdict && t.verdict !== 'Accepted');
