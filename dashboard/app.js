@@ -302,12 +302,27 @@ async function makeLinkCode() {
   setTimeout(check, 5000);
 }
 
+// 종합 리포트의 문제 키("dshs:62", "self:2", 예전 형식은 "62")를 문제로 바꾼다.
+const problemLabel = (k) => {
+  const [judge, id] = k.includes(':') ? k.split(':') : [null, k];
+  return `${JUDGE_LABEL[judge] ? `${JUDGE_LABEL[judge]} ` : ''}#${id}`;
+};
+const findByReportKey = (k) => {
+  const all = groupByProblem();
+  return k.includes(':') ? all.find((p) => p.key === k) : all.find((p) => p.id === k && p.judge === 'dshs') ?? all.find((p) => p.id === k);
+};
+
 function renderOverall(problems) {
   const overall = analyses.filter((a) => a.kind === 'overall').at(-1);
   const analyzed = problems.filter((p) => p.state.id === 'done').length;
   const busy = overall && (overall.status === 'running' || overall.status === 'queued');
   const btn = $('overall-run');
-  btn.disabled = !analyzed || busy;
+  btn.disabled = !analyzed || busy || !!bulk;
+  const targets = bulkTargets(problems);
+  $('analyze-everything').disabled = !!bulk || busy || (!targets.length && !analyzed);
+  $('analyze-everything').title = targets.length ? `문제 ${targets.length}개를 분석한 뒤 종합 리포트를 만들어요` : '분석할 새 문제가 없으면 종합 리포트만 다시 만들어요';
+  $('bulk-status').hidden = !bulk;
+  if (bulk) $('bulk-status').innerHTML = `<span class="pill busy">전체 분석 중</span> ${esc(bulk.text)}${bulk.notes.length ? `<div class="muted small">${bulk.notes.map(esc).join('<br>')}</div>` : ''}`;
   btn.textContent = overall ? '다시 만들기' : '종합 리포트 만들기';
   const body = $('overall-body');
 
@@ -325,7 +340,7 @@ function renderOverall(problems) {
       <div class="weak">
         <div class="weak-head"><b>${esc(w.title)}</b><span class="tag">${esc(tagName(w.tag))}</span></div>
         <p>${esc(w.description)}</p>
-        <p class="muted small">근거 ${w.problems.map((id) => `<a href="#" data-problem="${esc(id)}">#${esc(id)}</a>`).join(' ')}</p>
+        <p class="muted small">근거 ${w.problems.map((k) => `<a href="#" data-problem="${esc(k)}">${esc(problemLabel(k))}</a>`).join(' ')}</p>
         <p class="practice"><span class="label">연습</span>${esc(w.practice)}</p>
       </div>`).join('')}
     </div>
@@ -350,7 +365,7 @@ $('overall-body').addEventListener('click', (e) => {
   const a = e.target.closest('a[data-problem]');
   if (!a) return;
   e.preventDefault();
-  const p = groupByProblem().find((x) => x.id === a.dataset.problem);
+  const p = findByReportKey(a.dataset.problem);
   if (p) openProblem(p);
 });
 
@@ -412,6 +427,65 @@ async function analyzeMany(list) {
   }
   $('analyze-all').disabled = false;
 }
+
+// ---------- 전체 한 번에 분석 ----------
+// 분석이 필요한 문제를 모두 분석하고, 끝나길 기다렸다가 종합 리포트까지 만든다.
+let bulk = null; // { text, notes[] }
+
+// 지금 분석을 요청할 수 있는 문제: 분석 전, 새 제출이 생긴 것, 실패한 것. Claude가 필요한데 연결이 없으면 뺀다.
+function bulkTargets(problems) {
+  return problems.filter((p) => p.state.canRun && !(p.state.engine === 'claude' && !worker)
+    && !(p.state.id === 'needs_claude' && !worker));
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function bulkStep(text) { bulk.text = text; render(); }
+
+async function analyzeEverything() {
+  bulk = { text: '', notes: [] };
+  const targets = bulkTargets(groupByProblem());
+  const requested = [];
+  for (const [i, p] of targets.entries()) {
+    bulkStep(`문제별 분석 요청 ${i + 1} / ${targets.length} (${problemLabel(p.key)})`);
+    try {
+      const row = await analyzeProblem(p);
+      if (row?.id) requested.push(row.id);
+    } catch (e) {
+      bulk.notes.push(`${problemLabel(p.key)}: ${e.message}`);
+      if (/한도/.test(e.message)) break; // 오늘 Gemma 한도를 다 썼으면 나머지도 안 된다
+    }
+    await sleep(1500); // 무료 모델 호출 제한을 피하려고 간격을 둔다
+  }
+
+  // 요청한 분석이 끝날 때까지 기다린다. Claude 워커가 꺼져 있으면 그 문제는 기다리지 않는다.
+  const deadline = Date.now() + 10 * 60_000;
+  while (requested.length && Date.now() < deadline) {
+    try {
+      analyses = await loadAnalyses();
+      worker = (await sb.from('claude_workers').select('*').maybeSingle()).data;
+    } catch { /* 다음 주기에 다시 */ }
+    const waiting = analyses.filter((a) => requested.includes(a.id)
+      && ((a.status === 'running' && Date.now() - Date.parse(a.updated_at) < RUNNING_TIMEOUT_MS)
+        || (a.status === 'queued' && workerOnline())));
+    if (!waiting.length) break;
+    bulkStep(`문제별 분석 끝나길 기다리는 중… (${waiting.length}개 남음, Gemma는 문제당 30초~2분)`);
+    await sleep(5000);
+  }
+  const failed = analyses.filter((a) => requested.includes(a.id) && a.status === 'error').length;
+  if (failed) bulk.notes.push(`${failed}개 문제는 분석에 실패했어요. 표에서 "분석 실패"를 눌러 다시 시도할 수 있어요.`);
+
+  bulkStep('종합 리포트 만드는 중…');
+  try {
+    analyses.push(await requestAnalysis({ kind: 'overall' }));
+  } catch (e) {
+    bulk.notes.push(`종합 리포트: ${e.message}`);
+    bulkStep('끝났어요');
+    await sleep(6000);
+  }
+  bulk = null;
+  render();
+}
+$('analyze-everything').addEventListener('click', () => { if (!bulk) analyzeEverything(); });
 
 // ---------- 삭제 ----------
 // 브라우저 확인창 대신, 한 번 더 누르게 하는 버튼으로 실수를 막는다.

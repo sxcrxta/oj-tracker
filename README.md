@@ -43,6 +43,8 @@ supabase/
 - Gemma 분석은 한 사람당 하루 15회까지. OpenRouter 키는 Supabase secret(`OPENROUTER_API_KEY`)에 있다.
   무료 모델은 OpenRouter 계정 전체에 하루 호출 한도가 있어서, 사용자가 많아지면 한도에 걸릴 수 있다.
 - 종합 리포트는 Claude가 연결돼 있으면 Claude, 아니면 Gemma가 만든다.
+- **전체 분석하기** 버튼: 분석이 필요한 문제(분석 전, 새 제출 생김, 실패)를 모두 분석 요청하고, 끝날 때까지 기다렸다가
+  종합 리포트까지 만든다. Claude가 필요한데 연결이 없는 문제는 건너뛴다.
 
 ### Claude 연결하기 (선택)
 

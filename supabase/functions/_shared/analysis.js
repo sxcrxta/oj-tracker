@@ -132,17 +132,23 @@ ${subs.join('\n\n')}
 }
 
 // problemResults: [{ problem: 입력, result: 문제별 분석 }], pending: 아직 분석 못 한 문제 입력들
+// 종합 리포트에서 문제를 가리키는 키. 사이트가 달라도 번호가 겹칠 수 있어서 사이트를 붙인다.
+export const problemKey = (problem) => `${problem.judge ?? 'dshs'}:${problem.problemId}`;
+const JUDGE_NAMES = { dshs: 'dshs.app', self: '연습장' };
+
 export function overallPrompt(problemResults, pending = []) {
   const flow = (problem) => problem.submissions.map((s) => verdictKo[s.verdict] ?? s.verdict).join(' → ');
-  const body = problemResults.map(({ problem, result }) => `## #${problem.problemId} ${problem.title}
+  const name = (problem) => `[${problemKey(problem)}] ${JUDGE_NAMES[problem.judge] ?? problem.judge} #${problem.problemId} ${problem.title}`;
+  const body = problemResults.map(({ problem, result }) => `## ${name(problem)}
 제출 흐름: ${flow(problem)}
 요약: ${result.summary}
 약점: ${result.weak_points.map((w) => `[${w.tag}] ${w.description}`).join(' / ')}
 틀린 원인: ${result.attempts.map((a) => `(${a.n}) [${a.tag}] ${a.cause}`).join(' / ')}`);
-  const rest = pending.map((problem) => `- #${problem.problemId} ${problem.title}: ${flow(problem)}`);
+  const rest = pending.map((problem) => `- ${name(problem)}: ${flow(problem)}`);
   return `다음은 한 학생이 여러 문제를 풀면서 틀린 기록을 문제별로 분석한 결과다.
 문제들을 가로질러 반복되는 약점을 찾아 종합 리포트를 JSON으로 작성하라.
-problems에는 근거가 된 문제 번호만 숫자로 적는다.
+problems에는 근거가 된 문제의 키(대괄호 안의 값, 예: dshs:62)를 그대로 적는다.
+설명 문장에서는 키를 쓰지 말고 "#62"처럼 번호로 쓴다 (연습장 문제는 "연습장 #2").
 
 ${body.join('\n\n')}
 ${rest.length ? `\n## 아직 원인을 분석하지 않은 문제 (제출 흐름만 참고, 원인을 추측하지 마라)\n${rest.join('\n')}` : ''}`;
@@ -151,8 +157,9 @@ ${rest.length ? `\n## 아직 원인을 분석하지 않은 문제 (제출 흐름
 // ---------- DB 행 → 분석 입력 ----------
 
 // problems 행과 submissions 행들(시간 순)을 프롬프트 입력 형태로 바꾼다.
-export function toInput(problem, submissions, { problemId, title } = {}) {
+export function toInput(problem, submissions, { problemId, title, judge } = {}) {
   return {
+    judge: problem?.judge ?? judge ?? 'dshs',
     problemId: problem?.problem_id ?? problemId,
     title: problem?.title ?? title ?? submissions[0]?.problem_title ?? '',
     statement: problem?.statement ?? '(문제 설명을 불러오지 못함)',
@@ -252,7 +259,7 @@ export function normalizeOverallOutput(o) {
       tag: w.tag in MISTAKE_TAGS ? w.tag : 'other',
       title: String(w.title ?? ''),
       description: String(w.description ?? ''),
-      problems: (w.problems || []).map((p) => String(p).replace(/^#/, '')),
+      problems: (w.problems || []).map((p) => String(p).replace(/[#\[\]\s]/g, '')),
       practice: String(w.practice ?? ''),
     })),
     strengths: (o.strengths || []).map(String),
@@ -289,7 +296,7 @@ export function buildOverallInputs(submissionRows, analysisRows) {
   const pending = [];
   for (const [key, subs] of byProblem) {
     subs.sort((x, y) => (x.submitted_at < y.submitted_at ? -1 : 1));
-    const input = toInput(null, subs, { problemId: subs[0].problem_id });
+    const input = toInput(null, subs, { problemId: subs[0].problem_id, judge: subs[0].judge });
     if (route(input).reason === 'first_try') continue;
     const a = latest.get(key);
     if (a?.status === 'done' && a.result) done.push({ problem: input, result: a.result });
