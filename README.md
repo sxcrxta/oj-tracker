@@ -1,7 +1,9 @@
 # OJ 제출 기록기
 
 [dshs.app 온라인 저지](https://dshs.app/oj)에 낸 제출(코드, 결과, 틀린 테스트케이스, 채점 메시지)을
-자동으로 저장하고, 대시보드에서 문제별로 모아 보는 도구.
+자동으로 저장하고, 대시보드에서 문제별로 모아 보며 어디서 자주 틀리는지 분석하는 도구.
+
+대시보드: https://oj-tracker.vercel.app
 
 ```
 extension/   크롬 확장 프로그램 (MV3)
@@ -77,10 +79,13 @@ rm ~/Library/LaunchAgents/com.oj-analyzer.worker.plist       # bootout 후 이�
 
 ## 설치 (친구들용)
 
-1. 이 저장소를 내려받는다.
+1. 이 저장소를 내려받는다: 위쪽 초록색 **Code** → **Download ZIP** 후 압축 풀기 (또는 `git clone https://github.com/sxcrxta/oj-tracker.git`)
 2. 크롬에서 `chrome://extensions` → 오른쪽 위 **개발자 모드** 켜기 → **압축해제된 확장 프로그램 로드** → `extension` 폴더 선택.
-3. 확장 프로그램 아이콘 → 회원가입/로그인.
-4. 대시보드에서 같은 계정으로 로그인해 기록을 확인한다.
+3. 확장 프로그램 아이콘 → 회원가입/로그인. **로그인한 뒤에 낸 제출부터** 저장된다.
+4. 대시보드 **https://oj-tracker.vercel.app** 에서 같은 계정으로 로그인해 기록과 분석을 본다.
+5. (선택) Claude 구독이 있으면 위의 "Claude 연결하기"로 어려운 문제도 분석할 수 있다.
+
+업데이트할 때는 새로 내려받은 `extension` 폴더로 바꾸고 `chrome://extensions`에서 ↻를 누른다.
 
 ## 다른 채점 사이트 추가하기
 
