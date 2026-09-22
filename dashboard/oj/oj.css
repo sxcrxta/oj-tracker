@@ -1,0 +1,64 @@
+/* 연습장 전용 스타일. 색과 기본 요소는 ../style.css를 따른다. */
+.top { position: sticky; top: 0; z-index: 5; }
+.nav { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.nav a { color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 14px; }
+.nav a.on, .nav a:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.nav a.brand { color: var(--fg); font-weight: 700; font-size: 16px; margin-right: 8px; background: none; }
+.who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.small { font-size: 12px; }
+a { color: var(--accent); }
+
+.page-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.page-head h1 { font-size: 20px; margin: 0; text-wrap: balance; }
+.limits { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 13px; }
+.tags { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.tag { display: inline-block; font-size: 11.5px; padding: 1px 7px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 8%, transparent); white-space: nowrap; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.muted { color: var(--muted); border-color: var(--line); }
+.pill.draft { color: var(--tle); }
+
+/* 문제 풀기: 넓은 화면에서는 왼쪽 문제, 오른쪽 코드 */
+.solve { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.statement { line-height: 1.75; }
+.statement h2 { font-size: 15px; margin: 20px 0 6px; color: var(--muted); }
+.statement p { margin: 0 0 10px; }
+.statement pre, .ex pre { background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--fg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace; margin: 0; }
+.ex { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.ex .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.editor-card { position: sticky; top: 64px; display: grid; gap: 10px; }
+.CodeMirror { height: 440px; border: 1px solid var(--line); border-radius: 8px; font: 13.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; background: var(--surface); color: var(--fg); }
+.CodeMirror-gutters { background: var(--surface); border-right: 1px solid var(--line); }
+.CodeMirror-cursor { border-left-color: var(--fg); }
+.cm-s-default .cm-keyword { color: #c678dd; } .cm-s-default .cm-string { color: #98c379; }
+.cm-s-default .cm-number { color: #d19a66; } .cm-s-default .cm-comment { color: var(--muted); }
+.cm-s-default .cm-meta { color: #56b6c2; } .cm-s-default .cm-type, .cm-s-default .cm-variable-3 { color: #e5c07b; }
+.actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.result { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.result .big { font-size: 17px; font-weight: 700; }
+.bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 8px; }
+.bar span { display: block; height: 100%; background: var(--accent); transition: width .15s; }
+.tc { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.tc span { font-size: 12px; padding: 2px 6px; border-radius: 4px; border: 1px solid currentColor; font-variant-numeric: tabular-nums; }
+pre.plain { background: #1e1e22; color: #e4e4e7; padding: 10px 12px; white-space: pre-wrap; border-radius: 6px; font-size: 12.5px; margin: 8px 0 0; max-height: 220px; overflow: auto; }
+
+/* 관리 */
+.form { display: grid; gap: 10px; }
+.form label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.form input, .form textarea, .form select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--fg); font: inherit; }
+.form textarea { font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace; min-height: 90px; resize: vertical; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.jobs { display: grid; gap: 6px; margin-top: 10px; }
+.job { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.admin-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; align-items: start; }
+.check { display: flex !important; grid-template-columns: none; align-items: center; gap: 8px; flex-direction: row; color: var(--fg) !important; }
+.check input { width: auto; }
+
+@media (max-width: 900px) {
+  .solve, .admin-layout { grid-template-columns: 1fr; }
+  .editor-card { position: static; }
+  .CodeMirror { height: 320px; }
+}
+@media (max-width: 560px) {
+  .ex, .grid2, .grid3 { grid-template-columns: 1fr; }
+}

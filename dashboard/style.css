@@ -88,6 +88,7 @@ pre.plain { background: #1e1e22; color: #e4e4e7; padding: 12px 14px; white-space
 .tc span { font-size: 12px; padding: 2px 6px; border-radius: 4px; border: 1px solid currentColor; font-variant-numeric: tabular-nums; }
 h3 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); font-weight: 500; }
 
+.nav-link { color: var(--accent); text-decoration: none; font-size: 14px; }
 .row-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid currentColor; white-space: nowrap; }
 .pill.muted { color: var(--muted); border-color: var(--line); }

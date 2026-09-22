@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>연습장 관리</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="oj.css">
+</head>
+<body>
+  <header class="top" id="top"></header>
+  <main>
+    <div class="page-head"><h1>문제 관리</h1><span class="muted small" id="worker"></span></div>
+    <div class="admin-layout">
+      <div style="display:grid;gap:16px">
+        <section class="card">
+          <div class="card-head"><h2>Claude로 문제 만들기</h2></div>
+          <form class="form" id="gen-form">
+            <label>주제<input id="gen-topic" placeholder="예: 누적 합, BFS, 이분 탐색, 간단한 DP" required></label>
+            <label>난이도
+              <select id="gen-difficulty">
+                <option value="쉬움">쉬움</option>
+                <option value="보통" selected>보통</option>
+                <option value="어려움">어려움</option>
+              </select>
+            </label>
+            <label>추가 요청 (선택)<textarea id="gen-notes" placeholder="예: 입력이 큰 경우를 꼭 넣어줘, 이야기 있는 문제로"></textarea></label>
+            <label class="check"><input type="checkbox" id="gen-weak" checked> 내 약점 분석 결과를 반영해서 만들기</label>
+            <button class="primary" id="gen-submit">만들기 요청</button>
+            <p class="muted small">Claude 워커가 문제, 정답 코드, 테스트 데이터 생성기를 만들고, 정답 코드를 실제로 돌려 테스트케이스 출력을 만들어요. 다 되면 아래 목록에 비공개로 추가돼요. 1~3분쯤 걸려요.</p>
+          </form>
+          <div class="jobs" id="jobs"></div>
+        </section>
+        <section class="card">
+          <div class="card-head"><h2>문제 목록</h2><button id="new-problem">직접 만들기</button></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th class="num">#</th><th>제목</th><th>상태</th></tr></thead>
+              <tbody id="plist"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+      <section class="card" id="editor-card">
+        <p class="muted" id="editor-empty">왼쪽 목록에서 문제를 고르세요.</p>
+        <form class="form" id="edit-form" hidden>
+          <div class="card-head">
+            <h2 id="edit-heading"></h2>
+            <div class="actions">
+              <a id="edit-open" target="_blank">문제 페이지</a>
+              <button type="button" id="edit-publish"></button>
+              <button type="submit" class="primary">저장</button>
+            </div>
+          </div>
+          <label>제목<input id="f-title" required></label>
+          <div class="grid3">
+            <label>난이도<input id="f-difficulty"></label>
+            <label>시간 제한 (ms)<input id="f-tl" type="number" min="100" step="100"></label>
+            <label>메모리 제한 (MB)<input id="f-ml" type="number" min="16"></label>
+          </div>
+          <label>태그 (쉼표로 구분)<input id="f-tags"></label>
+          <label>문제 설명 (마크다운, 수식은 $...$)<textarea id="f-statement" rows="10"></textarea></label>
+          <div class="grid2">
+            <label>입력 설명<textarea id="f-input"></textarea></label>
+            <label>출력 설명<textarea id="f-output"></textarea></label>
+          </div>
+          <div id="f-examples"></div>
+          <button type="button" id="add-example">예제 추가</button>
+          <p class="muted small" id="f-testcases"></p>
+          <details id="f-private" hidden><summary>정답 코드와 생성기 (관리자만 보임)</summary><pre class="plain" id="f-solution"></pre><pre class="plain" id="f-generator"></pre><p class="muted small" id="f-notes"></p></details>
+          <div class="actions"><span style="flex:1"></span><button type="button" class="danger" id="edit-delete" data-label="문제 삭제">문제 삭제</button></div>
+        </form>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

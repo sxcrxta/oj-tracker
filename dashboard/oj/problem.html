@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>연습장 문제</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="oj.css">
+</head>
+<body>
+  <header class="top" id="top"></header>
+  <main>
+    <div class="page-head">
+      <h1 id="title">불러오는 중…</h1>
+      <div class="limits" id="limits"></div>
+    </div>
+    <div class="solve">
+      <section class="card">
+        <div class="statement" id="statement"></div>
+        <h2 class="ex-title">예제</h2>
+        <div id="examples"></div>
+        <h2 class="ex-title">내 제출</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>결과</th><th class="num">시간</th><th class="num">메모리</th><th>제출 시각</th></tr></thead>
+            <tbody id="mine"></tbody>
+          </table>
+        </div>
+        <p class="muted small" id="mine-empty" hidden>아직 제출하지 않았어요.</p>
+      </section>
+      <section class="card editor-card">
+        <div class="actions">
+          <span class="muted small">C++17 · <span id="compiler">컴파일러 준비 중…</span></span>
+          <span style="flex:1"></span>
+          <button id="run-examples">예제로 실행</button>
+          <button id="submit" class="primary">제출</button>
+        </div>
+        <textarea id="code"></textarea>
+        <div class="result" id="result" hidden></div>
+        <p class="muted small">채점은 이 브라우저에서 해요. WebAssembly라서 시간 제한은 문제에 적힌 값의 2배까지 봐줘요.</p>
+      </section>
+    </div>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+  <script type="module" src="problem.js"></script>
+</body>
+</html>

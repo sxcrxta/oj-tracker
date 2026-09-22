@@ -27,7 +27,11 @@ const ROUTE_REASONS = {
   multiple_verdicts: '틀린 종류가 여러 가지', big_change: '맞힐 때 코드를 많이 바꿈',
 };
 const LANG_HL = { cpp: 'cpp', c: 'c', python: 'python', py: 'python', java: 'java' };
-const JUDGE_PROBLEM_URL = { dshs: (id) => `https://dshs.app/oj/problem/${id}` };
+const JUDGE_PROBLEM_URL = {
+  dshs: (id) => `https://dshs.app/oj/problem/${id}`,
+  self: (id) => `/oj/problem.html?id=${id}`,
+};
+const JUDGE_LABEL = { self: '연습장' };
 const WORKER_ONLINE_MS = 90_000;
 const RUNNING_TIMEOUT_MS = 5 * 60_000;
 
@@ -70,7 +74,8 @@ $('sign-up').addEventListener('click', async () => {
   if (error) return loginMsg(error.message, 'err');
   if (!data.session) loginMsg('가입 확인 메일을 보냈어요. 메일의 링크를 누른 뒤 로그인하세요.', 'ok');
 });
-$('sign-out').addEventListener('click', () => sb.auth.signOut());
+// 이 브라우저만 로그아웃한다. (기본값 global은 확장 프로그램과 Claude 워커까지 끊는다)
+$('sign-out').addEventListener('click', () => sb.auth.signOut({ scope: 'local' }));
 
 let loadedFor = null;
 sb.auth.onAuthStateChange((_event, session) => {
@@ -79,6 +84,9 @@ sb.auth.onAuthStateChange((_event, session) => {
   $('app').hidden = !user;
   $('account').hidden = !user;
   $('who').textContent = user?.email ?? '';
+  // 연습장에서 로그인하러 왔으면 로그인 후 돌려보낸다. (같은 사이트 경로만)
+  const next = new URLSearchParams(location.search).get('next');
+  if (user && next && next.startsWith('/') && !next.startsWith('//')) { location.replace(next); return; }
   if (user && loadedFor !== user.id) { loadedFor = user.id; load(); }
   if (!user) { loadedFor = null; submissions = []; analyses = []; clearTimeout(pollTimer); }
 });
@@ -261,7 +269,12 @@ function renderClaude(problems) {
   } else if (workerOnline()) {
     html = `<span class="pill ok">Claude 연결됨</span><span class="muted">워커 ${esc(worker.model ?? '')} · ${ago(worker.last_seen)} 확인${waiting ? ` · 대기 ${waiting}개` : ''}</span>`;
   } else {
-    html = `<span class="pill claude">Claude 워커 꺼짐</span><span class="muted">마지막 확인 ${ago(worker.last_seen)}${waiting ? ` · 워커를 켜면 ${waiting}문제를 분석해요` : ''} (<code>node worker.js</code>)</span>`;
+    html = `<span class="pill claude">Claude 워커 꺼짐</span><span class="muted">마지막 확인 ${ago(worker.last_seen)}${waiting ? ` · 워커를 켜면 ${waiting}문제를 분석해요` : ''} (<code>node worker.js</code>)</span>
+      <details class="howto" ${linkCode ? 'open' : ''}><summary>워커 연결이 끊겼다면 다시 연결하기</summary>
+        <div class="link-box">${linkCode
+          ? `<code class="cmd">node worker.js link ${esc(linkCode.code)}</code><span class="muted small">${esc(linkExpiry())}</span>`
+          : '<button id="make-link">연결 코드 받기</button>'}</div>
+      </details>`;
   }
   $('claude-status').innerHTML = html;
   $('make-link')?.addEventListener('click', makeLinkCode);
@@ -282,7 +295,7 @@ async function makeLinkCode() {
   const until = Date.parse(linkCode.expires_at);
   const check = async () => {
     worker = (await sb.from('claude_workers').select('*').maybeSingle()).data;
-    if (worker) { linkCode = null; render(); return; }
+    if (workerOnline()) { linkCode = null; render(); return; }
     if (Date.now() < until) { renderClaude(groupByProblem()); setTimeout(check, 5000); }
     else { linkCode = null; render(); }
   };
@@ -370,7 +383,7 @@ function renderProblems(problems) {
   $('empty').hidden = submissions.length > 0;
   $('problems').innerHTML = shown.map((p) => `
     <tr data-key="${esc(p.key)}">
-      <td><span class="pid">#${esc(p.id)}</span>${esc(p.title)}</td>
+      <td>${JUDGE_LABEL[p.judge] ? `<span class="tag">${JUDGE_LABEL[p.judge]}</span>` : ''}<span class="pid">#${esc(p.id)}</span>${esc(p.title)}</td>
       <td>${p.solved ? '<span class="badge v-Accepted">해결</span>' : '<span class="badge v-WrongAnswer">미해결</span>'}</td>
       <td class="num">${p.list.length}</td>
       <td class="num">${p.wrong}</td>

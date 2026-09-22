@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>연습장 문제</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="oj.css">
+</head>
+<body>
+  <header class="top" id="top"></header>
+  <main>
+    <div class="page-head">
+      <h1>문제</h1>
+      <input id="filter" type="search" placeholder="번호, 제목, 태그로 찾기">
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th class="num">#</th><th>제목</th><th>난이도</th><th>태그</th><th>내 결과</th></tr></thead>
+          <tbody id="list"></tbody>
+        </table>
+      </div>
+      <p id="empty" class="muted center" hidden>아직 공개된 문제가 없어요.</p>
+    </div>
+  </main>
+  <script type="module" src="list.js"></script>
+</body>
+</html>

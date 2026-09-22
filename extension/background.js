@@ -162,7 +162,8 @@ const handlers = {
   signOut: async () => {
     const { session } = await chrome.storage.local.get('session');
     if (session) {
-      fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+      // 이 확장 프로그램 세션만 끊는다. (scope 없으면 대시보드와 Claude 워커까지 로그아웃된다)
+      fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
         method: 'POST', headers: { ...baseHeaders, Authorization: `Bearer ${session.access_token}` },
       }).catch(() => {});
     }

@@ -1,5 +1,8 @@
 {
   "name": "oj-analyzer",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@yowasp/clang": "22.0.0-git20542-10"
+  }
 }

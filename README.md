@@ -11,7 +11,8 @@ extension/   크롬 확장 프로그램 (MV3)
   content.js 사이트 페이지 안에서 새 제출과 문제 설명을 찾아 background로 전달
   background.js  Supabase 로그인 세션 관리 + 저장 (실패 시 1분마다 재시도)
 dashboard/   대시보드 정적 사이트 (Vercel 배포)
-analyzer/    로컬 Claude 워커(worker.js)와 모델 비교 도구(compare.js, report.js)
+  oj/        연습장 (문제 목록, 풀기, 관리, 브라우저 채점기)
+analyzer/    로컬 Claude 워커(worker.js), 문제 생성(problem-gen.js), 모델 비교 도구(compare.js, report.js)
 supabase/
   migrations/          DB 스키마
   functions/analyze/   분석 요청을 받는 Edge Function (Gemma 실행, Claude 대기열)
@@ -70,6 +71,24 @@ launchctl kickstart -k gui/$(id -u)/com.oj-analyzer.worker   # 다시 시작 (�
 launchctl bootout gui/$(id -u)/com.oj-analyzer.worker        # 끄기 (다음 로그인 때는 다시 켜짐)
 rm ~/Library/LaunchAgents/com.oj-analyzer.worker.plist       # bootout 후 이것까지 하면 자동 실행 해제
 ```
+
+## 연습장 (자체 온라인 저지)
+
+https://oj-tracker.vercel.app/oj/ — 관리자가 올린 문제를 누구나 풀 수 있는 작은 온라인 저지. 제출은 `submissions`에
+`judge = 'self'`로 저장돼서 대시보드와 약점 분석에 그대로 나온다.
+
+- **채점은 브라우저에서** 한다. [YoWASP Clang](https://github.com/YoWASP/clang)(WebAssembly용 clang, 처음 한 번 약 23MB)으로
+  C++17을 컴파일하고, 직접 만든 최소 WASI로 실행한다 (`dashboard/oj/judge-core.js`). 서버 비용이 없다.
+  - 테스트케이스를 모두 통과해야 "맞았습니다". 처음 틀린 케이스에서 멈춘다.
+  - WebAssembly는 느려서 시간 제한은 문제에 적힌 값의 2배까지 봐준다.
+  - 한계: 재귀 깊이는 브라우저 호출 스택 크기에 막힌다 (함수에 따라 1~10만 단계). 널 포인터 접근은 런타임 에러가 아니라 오답으로 나올 수 있다.
+  - 채점을 브라우저에서 하므로 테스트케이스는 푸는 사람도 볼 수 있다 (연습용이라 허용).
+- **문제 등록은 관리자만** (`oj_admins` 테이블). 관리 페이지에서 주제와 난이도를 적어 **Claude로 문제 만들기**를 요청하면
+  관리자의 Claude 워커가 처리한다 (`analyzer/problem-gen.js`).
+  1. Claude가 문제, 정답 코드, 느린 검증용 풀이, 테스트 입력 생성기를 쓴다. "내 약점 반영"을 켜면 약점 분석 결과를 참고한다.
+  2. 워커가 이 코드들을 WebAssembly 샌드박스(`analyzer/sandbox.js`, 파일·네트워크 접근 없음)에서 컴파일하고 실행해서
+     테스트 입력을 만들고, **정답 코드를 돌려 출력을 만든다**. 작은 테스트는 검증용 풀이와 답이 같은지 확인한다.
+  3. 검증에 실패하면 이유를 알려주고 한 번 더 고치게 한다. 통과하면 비공개 문제로 저장되고, 관리자가 보고 공개한다.
 
 ## 기록 삭제
 

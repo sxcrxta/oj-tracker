@@ -7,12 +7,13 @@
 //   node worker.js logout    로그아웃하고 Claude 연결 해제
 //
 // 옵션: --model sonnet|opus|haiku (기본 sonnet)
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { claudeCli } from './providers.js';
+import { generateProblem } from './problem-gen.js';
 import {
   SYSTEM_PROMPT, PROBLEM_SCHEMA, OVERALL_SCHEMA, problemPrompt, overallPrompt,
   toInput, normalizeProblemOutput, normalizeOverallOutput, buildOverallInputs,
@@ -47,14 +48,24 @@ function saveSession(s) {
 }
 
 let session = null;
+let refreshing = null;
 async function token() {
   if (!session) {
     if (!existsSync(SESSION_FILE)) throw new Error('먼저 연결하세요: 대시보드의 "Claude 연결"에서 코드를 받아 `node worker.js link <코드>`');
     session = JSON.parse(readFileSync(SESSION_FILE, 'utf8'));
   }
   if (session.expires_at - Date.now() < 120_000) {
-    session = await auth('token?grant_type=refresh_token', { refresh_token: session.refresh_token });
-    saveSession(session);
+    // 하트비트와 작업 처리가 동시에 갱신하면 토큰이 두 번 쓰이므로 한 번만 갱신한다.
+    refreshing ||= auth('token?grant_type=refresh_token', { refresh_token: session.refresh_token })
+      .then((s) => { session = s; saveSession(s); })
+      .catch((e) => {
+        if (/refresh token/i.test(e.message)) {
+          throw Object.assign(new Error('연결이 끊겼어요. 대시보드의 "Claude 연결"에서 새 코드를 받아 `node worker.js link <코드>`로 다시 연결하세요.'), { authLost: true });
+        }
+        throw e;
+      })
+      .finally(() => { refreshing = null; });
+    await refreshing;
   }
   return session.access_token;
 }
@@ -177,6 +188,42 @@ async function processNext() {
   return true;
 }
 
+// 연습장 관리자의 "Claude로 문제 만들기" 요청을 처리한다. (관리자가 아니면 RLS 때문에 항상 빈 목록)
+async function processProblemJob() {
+  const [job] = await db('oj_problem_jobs?status=eq.queued&order=created_at&limit=1');
+  if (!job) return false;
+  const claimed = await db(`oj_problem_jobs?id=eq.${job.id}&status=eq.queued`, {
+    method: 'PATCH', prefer: 'return=representation', body: { status: 'running', updated_at: new Date().toISOString() },
+  });
+  if (!claimed.length) return true;
+  log(`문제 만들기 시작: ${job.request.topic} (${job.request.difficulty})`);
+  const started = Date.now();
+  let patch;
+  try {
+    const problemId = await generateProblem(job, { analyze: claudeCli({ model }).analyze, db, log });
+    patch = { status: 'done', problem_id: problemId, error: null };
+    log(`문제 #${problemId} 완료 (${Math.round((Date.now() - started) / 1000)}초)`);
+  } catch (e) {
+    patch = { status: 'error', error: e.message.slice(0, 500) };
+    log(`문제 만들기 실패: ${e.message}`);
+  }
+  await db(`oj_problem_jobs?id=eq.${job.id}`, { method: 'PATCH', body: { ...patch, updated_at: new Date().toISOString() } });
+  return true;
+}
+
+// 다시 연결(link)해서 세션 파일이 새로 써질 때까지 기다린다.
+async function waitForRelink() {
+  const before = existsSync(SESSION_FILE) ? statSync(SESSION_FILE).mtimeMs : 0;
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 15_000));
+    if (existsSync(SESSION_FILE) && statSync(SESSION_FILE).mtimeMs !== before) {
+      session = null;
+      log('다시 연결됐어요.');
+      return;
+    }
+  }
+}
+
 async function run() {
   checkClaude();
   await token();
@@ -193,14 +240,24 @@ async function run() {
     method: 'PATCH', body: { status: 'queued', updated_at: now },
   });
   if (revived.length) log(`Claude 분석 필요였던 ${revived.length}개를 처리할게요.`);
+  await db(`oj_problem_jobs?status=eq.running&updated_at=lt.${q(stale)}`, {
+    method: 'PATCH', body: { status: 'queued', updated_at: now },
+  });
 
-  setInterval(() => heartbeat().catch((e) => log('연결 확인 실패:', e.message)), HEARTBEAT_MS);
+  setInterval(() => heartbeat().catch(() => {}), HEARTBEAT_MS); // 실패는 작업 루프가 로그로 남긴다
+  let lastError = '';
   for (;;) {
     let worked = false;
     try {
-      worked = await processNext();
+      worked = (await processNext()) || (await processProblemJob());
+      lastError = '';
     } catch (e) {
-      log('오류:', e.message);
+      if (e.message !== lastError) log('오류:', e.message); // 같은 오류는 한 번만 남긴다
+      lastError = e.message;
+      if (e.authLost) {
+        await waitForRelink();
+        continue;
+      }
     }
     if (!worked) await new Promise((r) => setTimeout(r, POLL_MS));
   }
