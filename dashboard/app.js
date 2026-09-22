@@ -312,8 +312,24 @@ const findByReportKey = (k) => {
   return k.includes(':') ? all.find((p) => p.key === k) : all.find((p) => p.id === k && p.judge === 'dshs') ?? all.find((p) => p.id === k);
 };
 
+// 종합 리포트 접기/펼치기. 이 브라우저에 기억한다.
+let overallCollapsed = false;
+try { overallCollapsed = localStorage.getItem('overall-collapsed') === '1'; } catch {}
+$('overall-toggle').addEventListener('click', () => {
+  overallCollapsed = !overallCollapsed;
+  try { localStorage.setItem('overall-collapsed', overallCollapsed ? '1' : '0'); } catch {}
+  render();
+});
+
 function renderOverall(problems) {
   const overall = analyses.filter((a) => a.kind === 'overall').at(-1);
+  // 접혀 있으면 본문 대신 한 줄 요약만 보여준다.
+  $('overall-toggle').setAttribute('aria-expanded', String(!overallCollapsed));
+  $('overall-toggle').classList.toggle('collapsed', overallCollapsed);
+  $('overall-body').hidden = overallCollapsed;
+  const summary = overall?.status === 'done' ? overall.result.overview : null;
+  $('overall-summary').hidden = !overallCollapsed || !summary;
+  $('overall-summary').textContent = summary ?? '';
   const analyzed = problems.filter((p) => p.state.id === 'done').length;
   const busy = overall && (overall.status === 'running' || overall.status === 'queued');
   const btn = $('overall-run');
