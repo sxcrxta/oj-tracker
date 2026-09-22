@@ -45,14 +45,24 @@ supabase/
 
 Claude 구독과 [Claude Code](https://claude.com/claude-code) 설치가 필요하다.
 
+1. 대시보드 → "Claude 연결 방법" → **연결 코드 받기** (10분 동안 한 번만 쓸 수 있는 코드)
+2. 터미널에서:
+
 ```bash
 cd analyzer
-node worker.js login      # 대시보드와 같은 계정으로 로그인 (한 번만)
-node worker.js            # 켜두는 동안 "Claude 분석 필요" 문제를 처리
-node worker.js logout     # 연결 해제
+node worker.js link <코드>   # 연결 (한 번만). 비밀번호 대신 코드를 쓴다
+node worker.js               # 켜두는 동안 "Claude 분석 필요" 문제를 처리
+node worker.js logout        # 연결 해제
 ```
 
-워커는 `claude -p`를 도구 없이(`--tools ""`) 실행해서 분석 결과만 받는다. 로그인 정보는 `~/.config/oj-analyzer/`에 저장된다.
+워커는 `claude -p`를 도구 없이(`--tools ""`) 실행해서 분석 결과만 받는다. 연결 정보는 `~/.config/oj-analyzer/`에 저장된다.
+연결 코드는 `worker-link` Edge Function이 발급하고, 쓰면 바로 지워진다 (DB에는 해시만 저장).
+
+## 기록 삭제
+
+대시보드에서 제출 하나(제출 보기 아래 "이 제출 삭제"), 문제 하나(문제 창 위 "문제 기록 삭제"),
+또는 전체("기록 관리" → "모든 기록 삭제")를 지울 수 있다. 버튼을 한 번 더 눌러야 지워진다.
+지운 제출은 확장 프로그램이 다시 저장하지 않는다.
 
 ## 설치 (친구들용)
 

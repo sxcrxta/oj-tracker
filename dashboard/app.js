@@ -164,7 +164,7 @@ function predictEngine(p) {
 function analysisState(p) {
   const a = p.analysis;
   const current = p.list.map((s) => s.submission_id);
-  const stale = a && current.some((id) => !a.submission_ids.includes(id));
+  const stale = a && (current.length !== a.submission_ids.length || current.some((id) => !a.submission_ids.includes(id)));
   if (!a) {
     const engine = predictEngine(p);
     if (!engine) return { id: 'first_try', label: '분석할 오답 없음', cls: 'muted' };
@@ -248,10 +248,13 @@ function renderClaude(problems) {
   if (!worker) {
     html = `<span class="pill claude">Claude 미연결</span>
       <span>기본 분석은 Gemma(무료)가 해요. 못 푼 문제나 원인이 여러 개인 문제는 Claude가 필요해요${waiting ? ` (지금 ${waiting}문제)` : ''}.</span>
-      <details class="howto"><summary>Claude 연결 방법</summary>
+      <details class="howto" ${linkCode ? 'open' : ''}><summary>Claude 연결 방법</summary>
         <ol>
           <li>Claude Code를 설치하고 로그인해요. (Claude 구독 필요)</li>
-          <li>저장소의 <code>analyzer</code> 폴더에서 <code>node worker.js login</code>으로 이 계정에 로그인해요.</li>
+          <li>연결 코드를 받아서, 저장소의 <code>analyzer</code> 폴더에서 아래 명령을 실행해요.
+            <div class="link-box">${linkCode
+              ? `<code class="cmd">node worker.js link ${esc(linkCode.code)}</code><span class="muted small">${esc(linkExpiry())}</span>`
+              : '<button id="make-link">연결 코드 받기</button>'}</div></li>
           <li><code>node worker.js</code>로 워커를 켜두면, 어려운 문제는 내 컴퓨터의 Claude가 분석해요.</li>
         </ol>
       </details>`;
@@ -261,6 +264,29 @@ function renderClaude(problems) {
     html = `<span class="pill claude">Claude 워커 꺼짐</span><span class="muted">마지막 확인 ${ago(worker.last_seen)}${waiting ? ` · 워커를 켜면 ${waiting}문제를 분석해요` : ''} (<code>node worker.js</code>)</span>`;
   }
   $('claude-status').innerHTML = html;
+  $('make-link')?.addEventListener('click', makeLinkCode);
+}
+
+// 워커 연결용 일회용 코드 (10분 유효). 비밀번호 대신 이 코드로 워커를 연결한다.
+let linkCode = null;
+const linkExpiry = () => {
+  const s = Math.max(0, Math.round((Date.parse(linkCode.expires_at) - Date.now()) / 1000));
+  return s ? `${Math.floor(s / 60)}분 ${s % 60}초 동안 한 번만 쓸 수 있어요` : '만료됐어요. 새로고침 후 다시 받으세요';
+};
+async function makeLinkCode() {
+  const { data, error } = await sb.functions.invoke('worker-link', { body: { action: 'create' } });
+  if (error) { alert(`코드를 받지 못했어요: ${error.message}`); return; }
+  linkCode = data;
+  render();
+  // 워커가 연결되면 바로 알 수 있게 잠시 확인한다.
+  const until = Date.parse(linkCode.expires_at);
+  const check = async () => {
+    worker = (await sb.from('claude_workers').select('*').maybeSingle()).data;
+    if (worker) { linkCode = null; render(); return; }
+    if (Date.now() < until) { renderClaude(groupByProblem()); setTimeout(check, 5000); }
+    else { linkCode = null; render(); }
+  };
+  setTimeout(check, 5000);
 }
 
 function renderOverall(problems) {
@@ -374,6 +400,54 @@ async function analyzeMany(list) {
   $('analyze-all').disabled = false;
 }
 
+// ---------- 삭제 ----------
+// 브라우저 확인창 대신, 한 번 더 누르게 하는 버튼으로 실수를 막는다.
+function armDelete(btn, label, action) {
+  btn.addEventListener('click', async () => {
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = '1';
+      btn.textContent = label;
+      btn.classList.add('danger-armed');
+      setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = btn.dataset.label; btn.classList.remove('danger-armed'); } }, 4000);
+      return;
+    }
+    btn.disabled = true;
+    try { await action(); } catch (e) { alert(`삭제하지 못했어요: ${e.message}`); btn.disabled = false; }
+  });
+}
+
+const check = ({ error }) => { if (error) throw error; };
+
+async function deleteSubmission(s) {
+  check(await sb.from('submissions').delete().eq('judge', s.judge).eq('submission_id', s.submission_id));
+  submissions = submissions.filter((x) => !(x.judge === s.judge && x.submission_id === s.submission_id));
+  codeCache.delete(`${s.judge}:${s.submission_id}`);
+}
+
+async function deleteProblem(p) {
+  check(await sb.from('submissions').delete().eq('judge', p.judge).eq('problem_id', p.id));
+  check(await sb.from('analyses').delete().eq('judge', p.judge).eq('problem_id', p.id));
+  check(await sb.from('problems').delete().eq('judge', p.judge).eq('problem_id', p.id));
+  submissions = submissions.filter((x) => x.judge !== p.judge || x.problem_id !== p.id);
+  analyses = analyses.filter((a) => a.judge !== p.judge || a.problem_id !== p.id);
+}
+
+async function deleteEverything() {
+  // RLS 때문에 본인 행만 지워진다. 조건이 없는 delete는 막혀 있어서 항상 참인 조건을 준다.
+  check(await sb.from('analyses').delete().not('id', 'is', null));
+  check(await sb.from('submissions').delete().not('submission_id', 'is', null));
+  check(await sb.from('problems').delete().not('problem_id', 'is', null));
+  submissions = [];
+  analyses = [];
+}
+
+armDelete($('delete-all'), '정말 모두 삭제', async () => {
+  await deleteEverything();
+  $('delete-all').disabled = false;
+  $('delete-all').textContent = $('delete-all').dataset.label;
+  render();
+});
+
 // ---------- 문제 상세 ----------
 const codeCache = new Map();
 
@@ -382,6 +456,12 @@ function openProblem(p) {
   const url = JUDGE_PROBLEM_URL[p.judge]?.(p.id);
   $('detail-title').innerHTML = `<span class="pid">#${esc(p.id)}</span>${
     url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(p.title)}</a>` : esc(p.title)}`;
+  $('detail-actions').innerHTML = '<button class="danger" id="delete-problem" data-label="문제 기록 삭제">문제 기록 삭제</button>';
+  armDelete($('delete-problem'), `제출 ${p.list.length}개 모두 삭제`, async () => {
+    await deleteProblem(p);
+    $('detail').close();
+    render();
+  });
   if (!$('detail').open) $('detail').showModal();
   refreshDetail(p, true);
 }
@@ -502,7 +582,14 @@ async function showAttempt(s, li, cause, n) {
       `<span class="${verdictClass(t.verdict)}" title="${esc(verdictName(t.verdict))} · ${t.time_ms}ms">#${t.index + 1}</span>`).join('')}</div>` : ''}
     ${full.compile_output ? `<h3>채점 메시지</h3><pre class="plain">${esc(full.compile_output)}</pre>` : ''}
     <h3>코드</h3>
-    <pre><code class="hljs language-${lang}">${code}</code></pre>`;
+    <pre><code class="hljs language-${lang}">${code}</code></pre>
+    <button class="danger" id="delete-sub" data-label="이 제출 삭제">이 제출 삭제</button>`;
+  armDelete($('delete-sub'), '정말 삭제', async () => {
+    await deleteSubmission(s);
+    const p = groupByProblem().find((x) => x.key === openKey);
+    if (!p) $('detail').close(); // 마지막 제출이었으면 문제도 목록에서 사라진다
+    render();
+  });
 }
 
 $('detail-close').addEventListener('click', () => $('detail').close());

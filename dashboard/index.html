@@ -68,13 +68,22 @@
         </div>
         <p id="empty" class="muted center" hidden>아직 저장된 제출이 없어요. 확장 프로그램에 로그인한 뒤 문제를 제출해 보세요.</p>
       </div>
+
+      <details class="settings">
+        <summary>기록 관리</summary>
+        <p class="muted">저장된 제출, 문제 설명, 분석 결과를 모두 지워요. 되돌릴 수 없어요. 지운 제출은 확장 프로그램이 다시 저장하지 않아요.</p>
+        <button class="danger" id="delete-all" data-label="모든 기록 삭제">모든 기록 삭제</button>
+      </details>
     </section>
   </main>
 
   <dialog id="detail">
     <div class="dialog-head">
       <h2 id="detail-title"></h2>
-      <button class="ghost" id="detail-close" aria-label="닫기">✕</button>
+      <div class="row-inline">
+        <span id="detail-actions"></span>
+        <button class="ghost" id="detail-close" aria-label="닫기">✕</button>
+      </div>
     </div>
     <div class="detail-body">
       <ol id="attempts" class="attempts"></ol>

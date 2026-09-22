@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // 로컬 Claude 워커: 대시보드에서 "Claude 분석"으로 넘어온 요청을 내 컴퓨터의 Claude Code로 처리한다.
 //
-//   node worker.js login     대시보드와 같은 계정으로 로그인 (한 번만)
+//   node worker.js link <코드>  대시보드의 "Claude 연결"에서 받은 코드로 연결 (한 번만)
+//   node worker.js login     또는 이메일/비밀번호로 로그인
 //   node worker.js           워커 실행 (켜두는 동안 요청을 처리)
 //   node worker.js logout    로그아웃하고 Claude 연결 해제
 //
@@ -48,7 +49,7 @@ function saveSession(s) {
 let session = null;
 async function token() {
   if (!session) {
-    if (!existsSync(SESSION_FILE)) throw new Error('먼저 `node worker.js login`으로 로그인하세요.');
+    if (!existsSync(SESSION_FILE)) throw new Error('먼저 연결하세요: 대시보드의 "Claude 연결"에서 코드를 받아 `node worker.js link <코드>`');
     session = JSON.parse(readFileSync(SESSION_FILE, 'utf8'));
   }
   if (session.expires_at - Date.now() < 120_000) {
@@ -88,6 +89,21 @@ async function login() {
   session = await auth('token?grant_type=password', { email, password });
   saveSession(session);
   console.log(`로그인했어요 (${session.user.email}). 이제 \`node worker.js\`로 워커를 켜세요.`);
+}
+
+// 대시보드에서 받은 일회용 코드로 로그인한다. 비밀번호를 입력할 필요가 없다.
+async function link() {
+  const code = args.filter((a) => !a.startsWith('--'))[1];
+  if (!code) throw new Error('사용법: node worker.js link <코드>  (대시보드의 "Claude 연결"에서 코드를 받으세요)');
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/worker-link`, {
+    method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'redeem', code }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `연결 실패 (${res.status})`);
+  session = await auth('verify', { type: 'magiclink', token_hash: data.token_hash });
+  saveSession(session);
+  console.log(`연결했어요 (${session.user.email}). 이제 \`node worker.js\`로 워커를 켜세요.`);
 }
 
 async function logout() {
@@ -190,9 +206,9 @@ async function run() {
   }
 }
 
-const commands = { login, logout, run };
+const commands = { link, login, logout, run };
 if (!commands[command]) {
-  console.error('사용법: node worker.js [login|logout] [--model sonnet]');
+  console.error('사용법: node worker.js [link <코드>|login|logout] [--model sonnet]');
   process.exit(1);
 }
 commands[command]().catch((e) => { console.error(e.message); process.exit(1); });

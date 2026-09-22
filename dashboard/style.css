@@ -122,6 +122,15 @@ h3 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); font-weight: 500;
 .callout p { margin: 6px 0 0; }
 .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
 
+.link-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 2px; }
+code.cmd { font-size: 13px; padding: 4px 8px; user-select: all; }
+button.danger { color: var(--wa); border-color: color-mix(in srgb, var(--wa) 40%, transparent); }
+button.danger-armed { background: var(--wa); border-color: var(--wa); color: #fff; }
+#delete-sub { margin-top: 4px; }
+.settings { margin-top: 16px; }
+.settings summary { cursor: pointer; color: var(--muted); }
+.settings p { margin: 8px 0; }
+
 @media (max-width: 640px) {
   .detail-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .attempts { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
