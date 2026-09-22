@@ -58,6 +58,17 @@ node worker.js logout        # 연결 해제
 워커는 `claude -p`를 도구 없이(`--tools ""`) 실행해서 분석 결과만 받는다. 연결 정보는 `~/.config/oj-analyzer/`에 저장된다.
 연결 코드는 `worker-link` Edge Function이 발급하고, 쓰면 바로 지워진다 (DB에는 해시만 저장).
 
+### 워커 자동 실행 (macOS)
+
+`~/Library/LaunchAgents/com.oj-analyzer.worker.plist`에 등록하면 로그인할 때 워커가 켜지고, 꺼지면 30초 뒤 다시 켜진다.
+로그는 `~/.config/oj-analyzer/worker.log`. plist에 node 경로가 고정돼 있어서 node 버전을 바꾸면 경로도 고쳐야 한다.
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.oj-analyzer.worker   # 다시 시작 (코드 수정 후)
+launchctl bootout gui/$(id -u)/com.oj-analyzer.worker        # 끄기 (다음 로그인 때는 다시 켜짐)
+rm ~/Library/LaunchAgents/com.oj-analyzer.worker.plist       # bootout 후 이것까지 하면 자동 실행 해제
+```
+
 ## 기록 삭제
 
 대시보드에서 제출 하나(제출 보기 아래 "이 제출 삭제"), 문제 하나(문제 창 위 "문제 기록 삭제"),
