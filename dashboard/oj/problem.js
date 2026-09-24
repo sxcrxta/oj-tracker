@@ -1,5 +1,6 @@
 import { sb, $, esc, fmtTime, fmtMem, verdictName, verdictClass, requireUser, renderMarkdown } from './common.js';
 import { judge, warm, TIME_FACTOR } from './judge.js';
+import { createEditor } from './editor.js';
 
 const TEMPLATE = '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n\n    return 0;\n}\n';
 
@@ -32,12 +33,14 @@ $('examples').innerHTML = problem.examples.map((e, i) => `
 const draftKey = `oj-draft-${id}`;
 let draft = null;
 try { draft = localStorage.getItem(draftKey); } catch {}
-const editor = window.CodeMirror.fromTextArea($('code'), {
-  mode: 'text/x-c++src', lineNumbers: true, indentUnit: 4, tabSize: 4, matchBrackets: true,
-  extraKeys: { Tab: (cm) => cm.replaceSelection('    ') },
+let saveTimer = null;
+const editor = await createEditor($('code'), {
+  value: draft ?? TEMPLATE,
+  onChange: (code) => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { try { localStorage.setItem(draftKey, code); } catch {} }, 400);
+  },
 });
-editor.setValue(draft ?? TEMPLATE);
-editor.on('change', () => { try { localStorage.setItem(draftKey, editor.getValue()); } catch {} });
 
 // 컴파일러를 미리 받아둔다. 채점을 누르기 전에 대부분 끝나 있게.
 warm((text) => { $('compiler').textContent = text; }, () => { $('compiler').textContent = '컴파일러 준비됨'; });

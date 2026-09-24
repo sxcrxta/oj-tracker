@@ -26,12 +26,8 @@ a { color: var(--accent); }
 .ex { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 .ex .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .editor-card { position: sticky; top: 64px; display: grid; gap: 10px; }
-.CodeMirror { height: 440px; border: 1px solid var(--line); border-radius: 8px; font: 13.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; background: var(--surface); color: var(--fg); }
-.CodeMirror-gutters { background: var(--surface); border-right: 1px solid var(--line); }
-.CodeMirror-cursor { border-left-color: var(--fg); }
-.cm-s-default .cm-keyword { color: #c678dd; } .cm-s-default .cm-string { color: #98c379; }
-.cm-s-default .cm-number { color: #d19a66; } .cm-s-default .cm-comment { color: var(--muted); }
-.cm-s-default .cm-meta { color: #56b6c2; } .cm-s-default .cm-type, .cm-s-default .cm-variable-3 { color: #e5c07b; }
+.editor { height: 460px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.monaco-editor .overflow-guard { border-radius: 8px; }
 .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .result { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 .result .big { font-size: 17px; font-weight: 700; }
@@ -67,7 +63,7 @@ pre.plain { background: #1e1e22; color: #e4e4e7; padding: 10px 12px; white-space
 @media (max-width: 900px) {
   .solve, .admin-layout { grid-template-columns: 1fr; }
   .editor-card { position: static; }
-  .CodeMirror { height: 320px; }
+  .editor { height: 340px; }
 }
 @media (max-width: 560px) {
   .ex, .grid2, .grid3 { grid-template-columns: 1fr; }

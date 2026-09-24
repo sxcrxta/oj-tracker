@@ -79,6 +79,8 @@ rm ~/Library/LaunchAgents/com.oj-analyzer.worker.plist       # bootout 후 이�
 https://oj-tracker.vercel.app/oj/ — 관리자가 올린 문제를 누구나 풀 수 있는 작은 온라인 저지. 제출은 `submissions`에
 `judge = 'self'`로 저장돼서 대시보드와 약점 분석에 그대로 나온다.
 
+- **편집기는 Monaco**(VS Code 편집기, cdnjs에서 불러옴)라서 dshs.app과 같다. 괄호 자동 닫기, 자동 들여쓰기,
+  자동 완성 제안, 괄호 짝 표시가 기본으로 동작한다 (`dashboard/oj/editor.js`).
 - **채점은 브라우저에서** 한다. [YoWASP Clang](https://github.com/YoWASP/clang)(WebAssembly용 clang, 처음 한 번 약 23MB)으로
   C++17을 컴파일하고, 직접 만든 최소 WASI로 실행한다 (`dashboard/oj/judge-core.js`). 서버 비용이 없다.
   - 테스트케이스를 모두 통과해야 "맞았습니다". 처음 틀린 케이스에서 멈춘다.
