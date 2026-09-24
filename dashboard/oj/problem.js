@@ -158,3 +158,79 @@ async function saveSubmission(source, submittedAt, r, testcaseCount) {
     testcase_count: testcaseCount, tags: problem.tags, fetched_at: new Date().toISOString(),
   }, { onConflict: 'owner_id,judge,problem_id' });
 }
+
+// ---------- 힌트 ----------
+// 힌트는 각자의 Claude 워커가 만든다. 요청을 hints 테이블에 넣으면 워커가 가져가서 채운다.
+const MAX_HINT_LEVEL = 3;
+let hints = [];
+let hintTimer = null;
+
+const hintPending = (h) => h.status === 'queued' || h.status === 'running';
+
+async function loadHints() {
+  const { data } = await sb.from('hints').select('*')
+    .eq('judge', 'self').eq('problem_id', String(id)).order('created_at');
+  hints = data ?? [];
+  renderHints();
+}
+
+async function hintNote() {
+  const { data: w } = await sb.from('claude_workers').select('last_seen').maybeSingle();
+  const online = w && Date.now() - Date.parse(w.last_seen) < 90_000;
+  $('hint-note').textContent = online ? 'Claude가 만들어요'
+    : w ? 'Claude 워커가 꺼져 있어요. 켜면 밀린 요청부터 처리해요'
+      : 'Claude를 연결하면 쓸 수 있어요 (대시보드 → Claude 연결)';
+}
+
+function hintCard(h) {
+  const title = h.kind === 'code' ? `내 코드 진단 · ${fmtTime(h.created_at)}` : `${h.level}단계 힌트`;
+  if (hintPending(h)) return `<div class="hint pending"><div class="level">${title}</div><p>Claude가 생각하는 중… (30초~1분)</p></div>`;
+  if (h.status === 'error') return `<div class="hint failed"><div class="level">${title}</div><p>${esc(h.error)}</p></div>`;
+  const r = h.result;
+  if (h.kind === 'code') {
+    return `<div class="hint"><div class="level">${title}</div>
+      <p>${esc(r.summary)}</p>
+      <ul>${r.look_here.map((x) => `<li><span class="where">${esc(x.where)}</span> — ${esc(x.why)}</li>`).join('')}</ul>
+      ${r.verdict_guess ? `<p class="muted small">${esc(r.verdict_guess)}</p>` : ''}</div>`;
+  }
+  return `<div class="hint"><div class="level">${title}</div>
+    <p>${esc(r.hint)}</p>
+    ${r.check_yourself.length ? `<ul>${r.check_yourself.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}</div>`;
+}
+
+function renderHints() {
+  const levels = hints.filter((h) => h.kind === 'level').sort((a, b) => a.level - b.level);
+  const codes = hints.filter((h) => h.kind === 'code');
+  $('hint-list').innerHTML = [...levels, ...codes.slice(-2)].map(hintCard).join('')
+    || '<p class="muted small">막히면 힌트를 눌러보세요. 단계가 올라갈수록 더 구체적으로 알려줘요. 정답 코드는 알려주지 않아요.</p>';
+
+  const nextLevel = (levels.filter((h) => h.status !== 'error').at(-1)?.level ?? 0) + 1;
+  const busy = hints.some(hintPending);
+  $('hint-next').disabled = busy || nextLevel > MAX_HINT_LEVEL;
+  $('hint-next').textContent = nextLevel > MAX_HINT_LEVEL ? '힌트를 다 봤어요' : `${nextLevel}단계 힌트 보기`;
+  $('hint-code').disabled = busy;
+
+  clearTimeout(hintTimer);
+  if (busy) hintTimer = setTimeout(() => { loadHints(); hintNote(); }, 5000);
+}
+
+async function requestHint(row) {
+  const { data, error } = await sb.from('hints').insert({ owner_id: user.id, judge: 'self', problem_id: String(id), ...row }).select().single();
+  if (error) { alert(`힌트를 요청하지 못했어요: ${error.message}`); return; }
+  hints.push(data);
+  renderHints();
+  hintNote();
+}
+
+$('hint-next').addEventListener('click', () => {
+  const levels = hints.filter((h) => h.kind === 'level' && h.status !== 'error');
+  requestHint({ kind: 'level', level: (levels.at(-1)?.level ?? 0) + 1 });
+});
+$('hint-code').addEventListener('click', () => {
+  const code = editor.getValue().trim();
+  if (code.length < 20) { alert('코드를 조금 더 쓴 뒤에 눌러주세요.'); return; }
+  requestHint({ kind: 'code', code });
+});
+
+loadHints();
+hintNote();

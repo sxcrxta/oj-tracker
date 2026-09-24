@@ -143,6 +143,20 @@ async function saveProblem(problem) {
   await chrome.storage.local.set({ problemsSaved: { ...problemsSaved, [`${problem.judge}:${problem.problem_id}`]: Date.now() } });
 }
 
+// hints 테이블 읽기/쓰기 (힌트 패널이 쓴다)
+async function rest(path, { method = 'GET', body } = {}) {
+  const session = await getSession().catch(() => null);
+  if (!session) throw new Error('로그인이 필요합니다');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers: { ...baseHeaders, Authorization: `Bearer ${session.access_token}`, ...(body ? { Prefer: 'return=representation' } : {}) },
+    body: body ? JSON.stringify({ ...body, owner_id: session.user.id }) : undefined,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`${res.status} ${text.slice(0, 200)}`);
+  return text ? JSON.parse(text) : null;
+}
+
 const handlers = {
   save: ({ record }) => save(record),
   saveProblem: ({ problem }) => saveProblem(problem),
@@ -182,6 +196,11 @@ const handlers = {
   },
   flush: () => flushOutbox(),
   inject: () => injectIntoOpenTabs(),
+  hintList: async ({ judge, problemId }) => ({
+    hints: await rest(`hints?judge=eq.${encodeURIComponent(judge)}&problem_id=eq.${encodeURIComponent(problemId)}&order=created_at`),
+  }),
+  hintRequest: async ({ row }) => ({ hint: (await rest('hints', { method: 'POST', body: row }))[0] }),
+  workerStatus: async () => ({ worker: (await rest('claude_workers?select=last_seen'))[0] ?? null }),
 };
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {

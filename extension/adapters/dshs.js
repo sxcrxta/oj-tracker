@@ -40,6 +40,10 @@
     isFinal: (item) => !!item.status && !PENDING.has(item.status) && !!item.verdict,
 
     problemId: (item) => String(item.problemId),
+    // 지금 보고 있는 문제 (힌트와 문제 저장에 쓴다)
+    currentProblemId: (loc) => loc.pathname.match(/^\/oj\/problem\/(\d+)/)?.[1] ?? null,
+    // 편집기에 쓰고 있는 코드 (CodeMirror 6)
+    currentCode: () => document.querySelector('.cm-content')?.innerText ?? '',
     problemUrl: (id) => `/api/oj/problems/${encodeURIComponent(id)}`,
 
     // 문제 설명은 서식 있는 문서(ProseMirror JSON)라 글자만 뽑는다. 그림은 옮길 수 없어서 있다는 표시만 남긴다.

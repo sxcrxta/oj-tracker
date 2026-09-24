@@ -71,6 +71,9 @@
         if (reachedOld || lastPage) break;
       }
     }
+    // 지금 보고 있는 문제도 저장해 둔다 (힌트에 문제 내용이 필요하다)
+    const current = adapter.currentProblemId?.(location);
+    if (current) problemIds.add(current);
     await saveProblems(adapter, problemIds, problemsSaved);
     return { saved, pending };
   }

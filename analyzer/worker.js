@@ -15,6 +15,9 @@ import { createInterface } from 'node:readline';
 import { claudeCli } from './providers.js';
 import { generateProblem } from './problem-gen.js';
 import {
+  HINT_SYSTEM, LEVEL_SCHEMA, CODE_SCHEMA, levelPrompt, codePrompt, normalizeLevelHint, normalizeCodeHint,
+} from '../supabase/functions/_shared/hints.js';
+import {
   SYSTEM_PROMPT, PROBLEM_SCHEMA, OVERALL_SCHEMA, problemPrompt, overallPrompt,
   toInput, normalizeProblemOutput, normalizeOverallOutput, buildOverallInputs,
 } from './prompts.js';
@@ -23,7 +26,7 @@ const SUPABASE_URL = 'https://uciyqapuzugedebycbmz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uArKEThfy_wUXWMTceVBdQ_L9SBF6b4';
 const SESSION_DIR = join(homedir(), '.config', 'oj-analyzer');
 const SESSION_FILE = join(SESSION_DIR, 'session.json');
-const POLL_MS = 10_000;
+const POLL_MS = 5_000;
 const HEARTBEAT_MS = 30_000;
 const STALE_RUNNING_MS = 15 * 60_000;
 
@@ -188,6 +191,64 @@ async function processNext() {
   return true;
 }
 
+// 힌트에 쓸 문제 정보. dshs 문제는 확장 프로그램이 저장해 둔 problems, 연습장 문제는 oj_problems에서 읽는다.
+async function loadProblemForHint(judge, problemId) {
+  const [saved] = await db(`problems?judge=eq.${q(judge)}&problem_id=eq.${q(problemId)}`);
+  if (saved) return saved;
+  if (judge !== 'self') return null;
+  const [p] = await db(`oj_problems?id=eq.${q(problemId)}`);
+  if (!p) return null;
+  return {
+    judge, problem_id: String(p.id), title: p.title,
+    statement: `${p.statement}\n\n## 입력\n\n${p.input_spec}\n\n## 출력\n\n${p.output_spec}`,
+    statement_has_images: false, examples: p.examples,
+    time_limit_ms: p.time_limit_ms, memory_limit_kb: p.memory_limit_kb,
+  };
+}
+
+// 문제를 푸는 중에 요청한 힌트를 처리한다.
+async function processHint() {
+  const [row] = await db('hints?status=eq.queued&order=created_at&limit=1');
+  if (!row) return false;
+  const claimed = await db(`hints?id=eq.${row.id}&status=eq.queued`, {
+    method: 'PATCH', prefer: 'return=representation',
+    body: { status: 'running', model: `claude-${model}`, updated_at: new Date().toISOString() },
+  });
+  if (!claimed.length) return true;
+
+  const label = `${row.judge} #${row.problem_id} ${row.kind === 'code' ? '코드 진단' : `${row.level}단계 힌트`}`;
+  log(`${label} 시작`);
+  let patch;
+  try {
+    const [problem, submissions, previous] = await Promise.all([
+      loadProblemForHint(row.judge, row.problem_id),
+      db(`submissions?select=verdict,submitted_at,testcase_results,compile_output&judge=eq.${q(row.judge)}&problem_id=eq.${q(row.problem_id)}&order=submitted_at`),
+      db(`hints?select=level,result,status&judge=eq.${q(row.judge)}&problem_id=eq.${q(row.problem_id)}&kind=eq.level&status=eq.done&order=level`),
+    ]);
+    if (!problem) throw new Error('문제 내용을 찾지 못했어요. 문제 페이지를 한 번 열었다가 다시 시도해 보세요.');
+    const claude = claudeCli({ model });
+    const { output } = row.kind === 'code'
+      ? await claude.analyze({
+        system: HINT_SYSTEM, schema: CODE_SCHEMA,
+        prompt: codePrompt({ problem, submissions, code: row.code ?? '', lastSubmission: submissions.at(-1) }),
+      })
+      : await claude.analyze({
+        system: HINT_SYSTEM, schema: LEVEL_SCHEMA,
+        prompt: levelPrompt({
+          problem, submissions, level: row.level,
+          previousHints: previous.filter((h) => h.level < row.level).map((h) => h.result?.hint).filter(Boolean),
+        }),
+      });
+    patch = { status: 'done', error: null, result: row.kind === 'code' ? normalizeCodeHint(output) : normalizeLevelHint(output) };
+    log(`${label} 완료`);
+  } catch (e) {
+    patch = { status: 'error', error: e.message.slice(0, 500) };
+    log(`${label} 실패: ${e.message}`);
+  }
+  await db(`hints?id=eq.${row.id}`, { method: 'PATCH', body: { ...patch, updated_at: new Date().toISOString() } });
+  return true;
+}
+
 // 연습장 관리자의 "Claude로 문제 만들기" 요청을 처리한다. (관리자가 아니면 RLS 때문에 항상 빈 목록)
 async function processProblemJob() {
   const [job] = await db('oj_problem_jobs?status=eq.queued&order=created_at&limit=1');
@@ -243,13 +304,14 @@ async function run() {
   await db(`oj_problem_jobs?status=eq.running&updated_at=lt.${q(stale)}`, {
     method: 'PATCH', body: { status: 'queued', updated_at: now },
   });
+  await db(`hints?status=eq.running&updated_at=lt.${q(stale)}`, { method: 'PATCH', body: { status: 'queued', updated_at: now } });
 
   setInterval(() => heartbeat().catch(() => {}), HEARTBEAT_MS); // 실패는 작업 루프가 로그로 남긴다
   let lastError = '';
   for (;;) {
     let worked = false;
     try {
-      worked = (await processNext()) || (await processProblemJob());
+      worked = (await processHint()) || (await processNext()) || (await processProblemJob());
       lastError = '';
     } catch (e) {
       if (e.message !== lastError) log('오류:', e.message); // 같은 오류는 한 번만 남긴다

@@ -39,6 +39,17 @@
         </div>
         <textarea id="code"></textarea>
         <div class="result" id="result" hidden></div>
+        <div class="hints" id="hints">
+          <div class="hint-head">
+            <b>힌트</b>
+            <span class="muted small" id="hint-note"></span>
+          </div>
+          <div id="hint-list"></div>
+          <div class="actions">
+            <button id="hint-next">힌트 보기</button>
+            <button id="hint-code">내 코드 진단</button>
+          </div>
+        </div>
         <p class="muted small">채점은 이 브라우저에서 해요. WebAssembly라서 시간 제한은 문제에 적힌 값의 2배까지 봐줘요.</p>
       </section>
     </div>
