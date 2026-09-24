@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>문제 연결 지도</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="library.css">
+</head>
+<body>
+  <header class="top">
+    <nav class="nav">
+      <a href="/" class="brand">OJ 제출 기록</a>
+      <a href="/">대시보드</a>
+      <a href="/library.html">코드 정리</a>
+      <a href="/graph.html" class="on">연결 지도</a>
+      <a href="/oj/">연습장</a>
+    </nav>
+    <span class="muted small" id="who"></span>
+  </header>
+
+  <main class="graph-wrap">
+    <div class="graph-legend">
+      <span><i class="legend-dot" style="background:var(--ac)"></i>해결</span>
+      <span><i class="legend-dot" style="background:var(--wa)"></i>미해결</span>
+      <span><i class="legend-dot" style="background:var(--muted)"></i>안 풀어봄</span>
+      <span><i class="legend-line" style="color:var(--accent)"></i>확장 ↔ 기본</span>
+      <span><i class="legend-line" style="color:var(--muted)"></i>비슷한 문제</span>
+      <span style="flex:1"></span>
+      <label class="check"><input type="checkbox" id="only-linked" checked> 연결된 문제만 보기</label>
+    </div>
+    <canvas id="graph"></canvas>
+    <aside class="graph-side" id="side" hidden></aside>
+    <p class="graph-hint">점을 누르면 그 문제를 볼 수 있어요. 끌어서 옮기고, 빈 곳을 끌면 화면이 움직여요.</p>
+  </main>
+
+  <script type="module" src="graph.js"></script>
+</body>
+</html>

@@ -6,6 +6,7 @@
   globalThis.__OJ_HINTS__ = { alive };
 
   const MAX_LEVEL = 3;
+  const DASHBOARD = 'https://oj-tracker.vercel.app';
   const adapters = globalThis.OJ_ADAPTERS || [];
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -47,6 +48,7 @@
     button.act:disabled { opacity: .5; cursor: default; }
     .empty { color: #a1a1aa; font-size: 12.5px; }
     .close { background: none; border: 0; color: #a1a1aa; cursor: pointer; font-size: 16px; }
+    a.act { text-align: center; text-decoration: none; display: block; }
   `;
 
   function mount() {
@@ -91,6 +93,9 @@
         <div class="head"><b>#${esc(problemId)} 힌트</b><button class="close" id="close">✕</button></div>
         <div class="note">${esc(note)}</div>
         <div>${cards || '<p class="empty">막히면 눌러보세요. 단계가 올라갈수록 구체적으로 알려줘요. 정답 코드는 알려주지 않아요.</p>'}</div>
+        <div class="row">
+          <a class="act link" id="library" href="${DASHBOARD}/library.html?judge=${encodeURIComponent(adapter.judge)}&problem=${encodeURIComponent(problemId)}" target="_blank" rel="noopener">코드 정리 열기</a>
+        </div>
         <div class="row">
           <button class="act primary" id="next" ${busy || nextLevel > MAX_LEVEL ? 'disabled' : ''}>${nextLevel > MAX_LEVEL ? '힌트를 다 봤어요' : `${nextLevel}단계 힌트 보기`}</button>
           <button class="act" id="code" ${busy ? 'disabled' : ''}>내 코드 진단</button>

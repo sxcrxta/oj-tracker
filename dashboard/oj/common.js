@@ -36,6 +36,8 @@ function renderHeader(user, isAdmin) {
       <a href="/oj/" class="brand">연습장</a>
       <a href="/oj/" class="${page === 'problems' ? 'on' : ''}">문제</a>
       ${isAdmin ? `<a href="/oj/admin.html" class="${page === 'admin' ? 'on' : ''}">관리</a>` : ''}
+      <a href="/library.html">코드 정리</a>
+      <a href="/graph.html">연결 지도</a>
       <a href="/">대시보드</a>
     </nav>
     <span class="muted small who">${esc(user.email)}</span>`;

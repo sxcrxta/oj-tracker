@@ -1,0 +1,66 @@
+/* 코드 정리창과 연결 지도 공통 + 전용 스타일. 색은 style.css의 토큰을 따른다. */
+.top .nav { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.nav a { color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 14px; }
+.nav a.on, .nav a:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.nav a.brand { color: var(--fg); font-weight: 700; font-size: 16px; margin-right: 8px; background: none; }
+
+.library { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 16px;
+  max-width: 1240px; margin: 0 auto; padding: 20px 16px 48px; align-items: start; }
+.side { position: sticky; top: 16px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+.side .card-head { margin-bottom: 8px; }
+.side #filter { width: 110px; }
+.problem-list { overflow-y: auto; display: grid; gap: 2px; }
+.problem { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%;
+  text-align: left; border: 0; background: none; color: inherit; font: inherit; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.problem:hover { background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.problem.on { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.counts { display: flex; gap: 4px; flex: none; }
+.count { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; }
+.detail { display: grid; gap: 16px; min-width: 0; }
+.detail .card { min-width: 0; }
+
+.links { display: grid; gap: 6px; }
+.link-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; }
+.add-link { margin-top: 10px; }
+.add-link summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+.add-link .form { margin-top: 10px; }
+
+.solution { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; margin-bottom: 10px; }
+.solution-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.solution p { margin: 0; }
+.solution .note { white-space: pre-wrap; }
+.solution pre { margin: 8px 0 0; border-radius: 8px; overflow: auto; font-size: 12.5px; }
+.solution summary { cursor: pointer; }
+.pill.busy { color: var(--busy); }
+
+dialog#editor-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--fg); }
+dialog#editor-dialog::backdrop { background: rgb(0 0 0 / .5); }
+dialog#editor-dialog[open] { display: flex; }
+#solution-form { display: flex; flex-direction: column; min-height: 0; width: 100%; gap: 0; }
+.dialog-body { padding: 14px 16px; overflow-y: auto; display: grid; gap: 10px; }
+.dialog-foot { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.form label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.form input, .form textarea, .form select { width: 100%; padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 6px; background: transparent; color: var(--fg); font: inherit; }
+.form textarea { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; resize: vertical; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+button.small { font-size: 12px; padding: 4px 8px; }
+
+/* 연결 지도 */
+.graph-wrap { position: relative; max-width: 1240px; margin: 0 auto; padding: 16px; }
+#graph { width: 100%; height: calc(100vh - 150px); min-height: 380px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--surface); touch-action: none; }
+.graph-side { position: absolute; right: 28px; top: 28px; width: min(300px, calc(100% - 56px));
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 8px; }
+.graph-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 8px; align-items: center; }
+.legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+.legend-line { display: inline-block; width: 18px; height: 0; border-top: 2px solid currentColor; margin-right: 4px; vertical-align: middle; }
+.graph-hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+
+@media (max-width: 860px) {
+  .library { grid-template-columns: 1fr; }
+  .side { position: static; max-height: none; }
+  .grid2 { grid-template-columns: 1fr; }
+}

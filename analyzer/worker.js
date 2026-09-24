@@ -17,6 +17,7 @@ import { generateProblem } from './problem-gen.js';
 import {
   HINT_SYSTEM, LEVEL_SCHEMA, CODE_SCHEMA, levelPrompt, codePrompt, normalizeLevelHint, normalizeCodeHint,
 } from '../supabase/functions/_shared/hints.js';
+import { EXPLAIN_SYSTEM, EXPLAIN_SCHEMA, explainPrompt, normalizeExplain } from '../supabase/functions/_shared/solutions.js';
 import {
   SYSTEM_PROMPT, PROBLEM_SCHEMA, OVERALL_SCHEMA, problemPrompt, overallPrompt,
   toInput, normalizeProblemOutput, normalizeOverallOutput, buildOverallInputs,
@@ -191,6 +192,45 @@ async function processNext() {
   return true;
 }
 
+// 정리해 둔 풀이에 Claude가 이름과 설명을 붙인다.
+async function processSolutionExplain() {
+  const [row] = await db('solutions?explain_status=eq.queued&order=updated_at&limit=1');
+  if (!row) return false;
+  const claimed = await db(`solutions?id=eq.${row.id}&explain_status=eq.queued`, {
+    method: 'PATCH', prefer: 'return=representation',
+    body: { explain_status: 'running', updated_at: new Date().toISOString() },
+  });
+  if (!claimed.length) return true;
+
+  const label = `${row.judge} #${row.problem_id} 풀이 설명`;
+  log(`${label} 시작`);
+  let patch;
+  try {
+    const [problem, others] = await Promise.all([
+      loadProblemForHint(row.judge, row.problem_id),
+      db(`solutions?select=title,approach&judge=eq.${q(row.judge)}&problem_id=eq.${q(row.problem_id)}&id=neq.${row.id}`),
+    ]);
+    if (!problem) throw new Error('문제 내용을 찾지 못했어요. 문제 페이지를 한 번 열었다가 다시 시도해 보세요.');
+    const { output } = await claudeCli({ model }).analyze({
+      system: EXPLAIN_SYSTEM, schema: EXPLAIN_SCHEMA,
+      prompt: explainPrompt({ problem, solution: row, otherSolutions: others }),
+    });
+    const e = normalizeExplain(output);
+    patch = {
+      explain_status: 'done', explain_error: null,
+      title: row.title?.trim() ? row.title : e.title,   // 내가 지은 이름이 있으면 그대로 둔다
+      approach: e.approach, complexity: e.complexity,
+      note: [row.note, e.key_points.map((k) => `- ${k}`).join('\n')].filter((x) => x && x.trim()).join('\n'),
+    };
+    log(`${label} 완료`);
+  } catch (e) {
+    patch = { explain_status: 'error', explain_error: e.message.slice(0, 300) };
+    log(`${label} 실패: ${e.message}`);
+  }
+  await db(`solutions?id=eq.${row.id}`, { method: 'PATCH', body: { ...patch, updated_at: new Date().toISOString() } });
+  return true;
+}
+
 // 힌트에 쓸 문제 정보. dshs 문제는 확장 프로그램이 저장해 둔 problems, 연습장 문제는 oj_problems에서 읽는다.
 async function loadProblemForHint(judge, problemId) {
   const [saved] = await db(`problems?judge=eq.${q(judge)}&problem_id=eq.${q(problemId)}`);
@@ -305,13 +345,15 @@ async function run() {
     method: 'PATCH', body: { status: 'queued', updated_at: now },
   });
   await db(`hints?status=eq.running&updated_at=lt.${q(stale)}`, { method: 'PATCH', body: { status: 'queued', updated_at: now } });
+  await db(`solutions?explain_status=eq.running&updated_at=lt.${q(stale)}`, { method: 'PATCH', body: { explain_status: 'queued', updated_at: now } });
 
   setInterval(() => heartbeat().catch(() => {}), HEARTBEAT_MS); // 실패는 작업 루프가 로그로 남긴다
   let lastError = '';
   for (;;) {
     let worked = false;
     try {
-      worked = (await processHint()) || (await processNext()) || (await processProblemJob());
+      worked = (await processHint()) || (await processSolutionExplain())
+        || (await processNext()) || (await processProblemJob());
       lastError = '';
     } catch (e) {
       if (e.message !== lastError) log('오류:', e.message); // 같은 오류는 한 번만 남긴다

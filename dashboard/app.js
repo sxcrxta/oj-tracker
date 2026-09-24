@@ -559,7 +559,10 @@ function openProblem(p) {
   const url = JUDGE_PROBLEM_URL[p.judge]?.(p.id);
   $('detail-title').innerHTML = `<span class="pid">#${esc(p.id)}</span>${
     url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(p.title)}</a>` : esc(p.title)}`;
-  $('detail-actions').innerHTML = '<button class="danger" id="delete-problem" data-label="문제 기록 삭제">문제 기록 삭제</button>';
+  $('detail-actions').innerHTML = `
+    <a href="/library.html?judge=${encodeURIComponent(p.judge)}&problem=${encodeURIComponent(p.id)}" class="nav-link">코드 정리</a>
+    <a href="/graph.html?focus=${encodeURIComponent(p.key)}" class="nav-link">연결 지도</a>
+    <button class="danger" id="delete-problem" data-label="문제 기록 삭제">문제 기록 삭제</button>`;
   armDelete($('delete-problem'), `제출 ${p.list.length}개 모두 삭제`, async () => {
     await deleteProblem(p);
     $('detail').close();

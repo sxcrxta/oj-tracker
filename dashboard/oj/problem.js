@@ -21,6 +21,10 @@ $('limits').innerHTML = `
   ${problem.difficulty ? `<span>${esc(problem.difficulty)}</span>` : ''}
   <span class="tags">${problem.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</span>`;
 
+$('page-links').innerHTML = `
+  <a href="/library.html?judge=self&problem=${problem.id}">코드 정리</a>
+  <a href="/graph.html?focus=self:${problem.id}">연결 지도</a>`;
+
 const fullStatement = `${problem.statement}\n\n## 입력\n\n${problem.input_spec}\n\n## 출력\n\n${problem.output_spec}`;
 renderMarkdown($('statement'), fullStatement);
 $('examples').innerHTML = problem.examples.map((e, i) => `

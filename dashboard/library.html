@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>코드 정리</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="library.css">
+</head>
+<body>
+  <header class="top">
+    <nav class="nav">
+      <a href="/" class="brand">OJ 제출 기록</a>
+      <a href="/">대시보드</a>
+      <a href="/library.html" class="on">코드 정리</a>
+      <a href="/graph.html">연결 지도</a>
+      <a href="/oj/">연습장</a>
+    </nav>
+    <span class="muted small" id="who"></span>
+  </header>
+
+  <main class="library">
+    <aside class="card side">
+      <div class="card-head"><h2>문제</h2><input id="filter" type="search" placeholder="찾기"></div>
+      <div class="problem-list" id="problem-list"></div>
+    </aside>
+
+    <section id="detail" class="detail">
+      <p class="muted center" id="pick">왼쪽에서 문제를 고르세요.</p>
+
+      <div id="content" hidden>
+        <div class="card">
+          <div class="card-head">
+            <h2 id="problem-title"></h2>
+            <div class="row-inline">
+              <a id="problem-link" target="_blank" rel="noopener">문제 열기</a>
+              <a id="graph-link">연결 지도에서 보기</a>
+            </div>
+          </div>
+          <div class="links" id="links"></div>
+          <details class="add-link">
+            <summary>문제 연결 추가</summary>
+            <form class="form" id="link-form">
+              <div class="grid2">
+                <label>연결할 문제
+                  <select id="link-target"></select>
+                </label>
+                <label>관계
+                  <select id="link-kind">
+                    <option value="extends">이 문제의 확장 버전이다</option>
+                    <option value="base">이 문제의 기본 버전이다</option>
+                    <option value="similar">비슷한 문제다</option>
+                  </select>
+                </label>
+              </div>
+              <label>메모 (선택)<input id="link-note" placeholder="예: N 범위가 커져서 O(N log N) 필요"></label>
+              <button class="primary" type="submit">연결하기</button>
+            </form>
+          </details>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>정리한 풀이 <span class="muted small" id="solution-count"></span></h2>
+            <button id="add-solution" class="primary">풀이 추가</button>
+          </div>
+          <div id="solutions"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="editor-dialog">
+    <form class="form" id="solution-form" method="dialog">
+      <div class="dialog-head">
+        <h2 id="editor-title">풀이 추가</h2>
+        <button type="button" class="ghost" id="editor-close" aria-label="닫기">✕</button>
+      </div>
+      <div class="dialog-body">
+        <label>가져올 제출 (선택)
+          <select id="from-submission"><option value="">직접 붙여넣기</option></select>
+        </label>
+        <label>이름<input id="s-title" placeholder="예: 탑다운 메모이제이션"></label>
+        <label>코드<textarea id="s-code" rows="12" spellcheck="false"></textarea></label>
+        <div class="grid2">
+          <label>핵심 아이디어<textarea id="s-approach" rows="3"></textarea></label>
+          <label>시간복잡도<textarea id="s-complexity" rows="3" placeholder="예: 시간 O(N), 공간 O(N)"></textarea></label>
+        </div>
+        <label>메모<textarea id="s-note" rows="3"></textarea></label>
+        <p class="msg" id="editor-msg" hidden></p>
+      </div>
+      <div class="dialog-foot">
+        <button type="button" id="explain" >Claude가 설명 채우기</button>
+        <span style="flex:1"></span>
+        <button type="button" class="danger" id="delete-solution" data-label="삭제" hidden>삭제</button>
+        <button type="submit" class="primary" id="save-solution">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script type="module" src="library.js"></script>
+</body>
+</html>
