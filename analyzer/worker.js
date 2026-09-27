@@ -18,6 +18,7 @@ import {
   HINT_SYSTEM, LEVEL_SCHEMA, CODE_SCHEMA, levelPrompt, codePrompt, normalizeLevelHint, normalizeCodeHint,
 } from '../supabase/functions/_shared/hints.js';
 import { EXPLAIN_SYSTEM, EXPLAIN_SCHEMA, explainPrompt, normalizeExplain } from '../supabase/functions/_shared/solutions.js';
+import { MAP_SYSTEM, MAP_SCHEMA, mapPrompt, normalizeMap } from '../supabase/functions/_shared/map.js';
 import {
   SYSTEM_PROMPT, PROBLEM_SCHEMA, OVERALL_SCHEMA, problemPrompt, overallPrompt,
   toInput, normalizeProblemOutput, normalizeOverallOutput, buildOverallInputs,
@@ -289,6 +290,118 @@ async function processHint() {
   return true;
 }
 
+// 문제 지도의 "Claude로 정리": 아직 분류 안 된 문제에 분류를 붙이고 연결을 더한다.
+const MAP_BATCH = 12; // Claude 한 번에 보낼 문제 수
+
+async function organizeMap() {
+  const [subs, ojProblems, solutions, categories, links] = await Promise.all([
+    db('submissions?select=judge,problem_id,problem_title,verdict,source_code,submitted_at&order=submitted_at.desc'),
+    db('oj_problems?select=id,title'),
+    db('solutions?select=judge,problem_id,problem_title,code&order=updated_at.desc'),
+    db('problem_categories?select=judge,problem_id,category'),
+    db('problem_links?select=from_judge,from_problem,to_judge,to_problem,kind'),
+  ]);
+
+  // 지도에 나오는 문제와 같은 범위: 내 제출, 연습장 문제, 정리한 풀이, 연결에 나온 문제.
+  const all = new Map();
+  const touch = (judge, id, title) => {
+    const key = `${judge}:${id}`;
+    if (!all.has(key)) all.set(key, { key, judge, id: String(id), title: title || '', code: '', accepted: false, category: null });
+    const p = all.get(key);
+    if (title && !p.title) p.title = title;
+    return p;
+  };
+  for (const p of ojProblems) touch('self', p.id, p.title);
+  for (const s of subs) { // 최근 것부터. 맞은 코드가 있으면 그걸, 없으면 가장 최근 코드를 쓴다.
+    const p = touch(s.judge, s.problem_id, s.problem_title);
+    if (!s.source_code) continue;
+    if (s.verdict === 'Accepted' && !p.accepted) { p.code = s.source_code; p.accepted = true; }
+    else if (!p.code) p.code = s.source_code;
+  }
+  for (const s of solutions) {
+    const p = touch(s.judge, s.problem_id, s.problem_title);
+    if (!p.accepted && s.code) p.code = s.code;
+  }
+  for (const l of links) { touch(l.from_judge, l.from_problem); touch(l.to_judge, l.to_problem); }
+  for (const c of categories) if (all.has(`${c.judge}:${c.problem_id}`)) all.get(`${c.judge}:${c.problem_id}`).category = c.category;
+
+  const pending = [...all.values()].filter((p) => !p.category);
+  if (!pending.length) return { classified: 0, links: 0, total: all.size };
+  log(`  새 문제 ${pending.length}개를 정리해요`);
+
+  const pairKey = (a, b) => [a, b].sort().join('|');
+  const linked = new Set(links.map((l) => pairKey(`${l.from_judge}:${l.from_problem}`, `${l.to_judge}:${l.to_problem}`)));
+  const allList = () => [...all.values()].map(({ key, title, category }) => ({ key, title, category }));
+  let classified = 0; let added = 0;
+
+  for (let i = 0; i < pending.length; i += MAP_BATCH) {
+    const batch = pending.slice(i, i + MAP_BATCH);
+    const targets = [];
+    for (const p of batch) {
+      const problem = await loadProblemForHint(p.judge, p.id);
+      targets.push({ key: p.key, title: p.title || problem?.title || '', statement: problem?.statement ?? '', code: p.code });
+    }
+    const { output } = await claudeCli({ model }).analyze({ system: MAP_SYSTEM, schema: MAP_SCHEMA, prompt: mapPrompt({ targets, all: allList() }) });
+    const result = normalizeMap(output, { targets, all: allList() });
+
+    if (result.categories.length) {
+      await db('problem_categories?on_conflict=owner_id,judge,problem_id', {
+        method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
+        body: result.categories.map((c) => {
+          const p = all.get(c.key);
+          p.category = c.category; // 다음 묶음에서 연결을 고를 때 참고하도록
+          return { owner_id: session.user.id, judge: p.judge, problem_id: p.id, category: c.category, updated_at: new Date().toISOString() };
+        }),
+      });
+      classified += result.categories.length;
+    }
+    // 이미 이어진 두 문제는 다시 잇지 않는다 (종류가 달라도).
+    const fresh = result.links.filter((l) => {
+      const k = pairKey(l.from, l.to);
+      if (linked.has(k)) return false;
+      linked.add(k);
+      return true;
+    });
+    if (fresh.length) {
+      await db('problem_links', {
+        method: 'POST', prefer: 'return=minimal',
+        body: fresh.map((l) => {
+          const a = all.get(l.from); const b = all.get(l.to);
+          return {
+            owner_id: session.user.id, kind: l.kind, note: l.note,
+            from_judge: a.judge, from_problem: a.id, from_title: a.title || null,
+            to_judge: b.judge, to_problem: b.id, to_title: b.title || null,
+          };
+        }),
+      });
+      added += fresh.length;
+    }
+  }
+  return { classified, links: added, total: all.size };
+}
+
+async function processMapJob() {
+  const [job] = await db('map_jobs?status=eq.queued&order=created_at&limit=1');
+  if (!job) return false;
+  const claimed = await db(`map_jobs?id=eq.${job.id}&status=eq.queued`, {
+    method: 'PATCH', prefer: 'return=representation', body: { status: 'running', updated_at: new Date().toISOString() },
+  });
+  if (!claimed.length) return true;
+  log('문제 지도 정리 시작');
+  const started = Date.now();
+  let patch;
+  try {
+    const result = await organizeMap();
+    patch = { status: 'done', result, error: null };
+    log(`문제 지도 정리 완료: 분류 ${result.classified}개, 연결 ${result.links}개 (${Math.round((Date.now() - started) / 1000)}초)`);
+  } catch (e) {
+    patch = { status: 'error', error: e.message.slice(0, 500) };
+    log(`문제 지도 정리 실패: ${e.message}`);
+  }
+  await db(`map_jobs?id=eq.${job.id}`, { method: 'PATCH', body: { ...patch, updated_at: new Date().toISOString() } });
+  return true;
+}
+
 // 연습장 관리자의 "Claude로 문제 만들기" 요청을 처리한다. (관리자가 아니면 RLS 때문에 항상 빈 목록)
 async function processProblemJob() {
   const [job] = await db('oj_problem_jobs?status=eq.queued&order=created_at&limit=1');
@@ -346,13 +459,14 @@ async function run() {
   });
   await db(`hints?status=eq.running&updated_at=lt.${q(stale)}`, { method: 'PATCH', body: { status: 'queued', updated_at: now } });
   await db(`solutions?explain_status=eq.running&updated_at=lt.${q(stale)}`, { method: 'PATCH', body: { explain_status: 'queued', updated_at: now } });
+  await db(`map_jobs?status=eq.running&updated_at=lt.${q(stale)}`, { method: 'PATCH', body: { status: 'queued', updated_at: now } });
 
   setInterval(() => heartbeat().catch(() => {}), HEARTBEAT_MS); // 실패는 작업 루프가 로그로 남긴다
   let lastError = '';
   for (;;) {
     let worked = false;
     try {
-      worked = (await processHint()) || (await processSolutionExplain())
+      worked = (await processHint()) || (await processSolutionExplain()) || (await processMapJob())
         || (await processNext()) || (await processProblemJob());
       lastError = '';
     } catch (e) {

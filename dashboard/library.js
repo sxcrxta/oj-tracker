@@ -58,7 +58,6 @@ function select(p, pushUrl = true) {
   $('graph-link').href = `/graph.html?focus=${encodeURIComponent(p.key)}`;
   renderLinks();
   renderSolutions();
-  renderLinkTargets();
 }
 
 function renderLinks() {
@@ -69,45 +68,15 @@ function renderLinks() {
       <a href="?judge=${encodeURIComponent(l.judge)}&problem=${encodeURIComponent(l.id)}" data-goto="${esc(problemKey(l.judge, l.id))}">
         ${esc(shortLabel(l.judge, l.id))} ${esc(l.title ?? '')}</a>
       ${l.note ? `<span class="muted small">${esc(l.note)}</span>` : ''}
-      <button class="ghost small" data-unlink="${l.row.id}">연결 끊기</button>
-    </div>`).join('') : '<p class="muted small">아직 연결한 문제가 없어요. 확장 버전이나 비슷한 문제를 이어두면 나중에 같이 보여요.</p>';
+    </div>`).join('') : '';
 }
 
-$('links').addEventListener('click', async (e) => {
+$('links').addEventListener('click', (e) => {
   const go = e.target.closest('[data-goto]');
-  if (go) {
-    e.preventDefault();
-    const p = problems.find((x) => x.key === go.dataset.goto);
-    if (p) select(p);
-    return;
-  }
-  const un = e.target.closest('[data-unlink]');
-  if (!un) return;
-  const { error } = await sb.from('problem_links').delete().eq('id', un.dataset.unlink);
-  if (error) { alert(error.message); return; }
-  await refresh();
-});
-
-function renderLinkTargets() {
-  const connected = new Set(linksOf(links, current.judge, current.id).map((l) => problemKey(l.judge, l.id)));
-  $('link-target').innerHTML = problems
-    .filter((p) => p.key !== current.key && !connected.has(p.key))
-    .map((p) => `<option value="${esc(p.key)}">${esc(shortLabel(p.judge, p.id))} ${esc(p.title)}</option>`).join('');
-}
-
-$('link-form').addEventListener('submit', async (e) => {
+  if (!go) return;
   e.preventDefault();
-  const target = problems.find((p) => p.key === $('link-target').value);
-  if (!target) return;
-  // extends = "상대가 이 문제의 확장 버전" 이므로 from=상대, to=현재로 저장하면 읽을 때 방향이 맞는다.
-  const kind = $('link-kind').value;
-  const row = kind === 'extends'
-    ? { from_judge: target.judge, from_problem: target.id, from_title: target.title, to_judge: current.judge, to_problem: current.id, to_title: current.title, kind: 'base' }
-    : { from_judge: current.judge, from_problem: current.id, from_title: current.title, to_judge: target.judge, to_problem: target.id, to_title: target.title, kind };
-  const { error } = await sb.from('problem_links').insert({ owner_id: user.id, ...row, note: $('link-note').value.trim() });
-  if (error) { alert(error.message.includes('duplicate') ? '이미 연결돼 있어요.' : error.message); return; }
-  $('link-note').value = '';
-  await refresh();
+  const p = problems.find((x) => x.key === go.dataset.goto);
+  if (p) select(p);
 });
 
 // ---------- 풀이 목록 ----------

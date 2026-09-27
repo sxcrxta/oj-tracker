@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>문제 연결 지도</title>
+  <title>문제 지도</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="library.css">
 </head>
-<body>
+<body class="graph-page">
   <header class="top">
     <nav class="nav">
       <a href="/" class="brand">OJ 제출 기록</a>
@@ -19,19 +19,32 @@
     <span class="muted small" id="who"></span>
   </header>
 
-  <main class="graph-wrap">
-    <div class="graph-legend">
+  <main class="graph-stage">
+    <canvas id="graph"></canvas>
+
+    <div class="glass graph-title">
+      <h1>문제 지도</h1>
+      <div class="graph-stats" id="stats"></div>
+    </div>
+
+    <div class="glass graph-controls">
+      <label class="chip"><input type="checkbox" id="group-category" checked><span>분류로 묶기</span></label>
+      <label class="chip"><input type="checkbox" id="show-all"><span>분류 안 된 문제도</span></label>
+      <button class="chip" id="fit" type="button" title="전체 보기" aria-label="전체 보기">⤢</button>
+      <button class="chip ai" id="organize" type="button">✦ Claude로 정리</button>
+    </div>
+
+    <div class="glass graph-toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <div class="glass graph-legend">
       <span><i class="legend-dot" style="background:var(--ac)"></i>해결</span>
       <span><i class="legend-dot" style="background:var(--wa)"></i>미해결</span>
-      <span><i class="legend-dot" style="background:var(--muted)"></i>안 풀어봄</span>
-      <span><i class="legend-line" style="color:var(--accent)"></i>확장 ↔ 기본</span>
-      <span><i class="legend-line" style="color:var(--muted)"></i>비슷한 문제</span>
-      <span style="flex:1"></span>
-      <label class="check"><input type="checkbox" id="only-linked" checked> 연결된 문제만 보기</label>
+      <span><i class="legend-dot hollow"></i>안 풀어봄</span>
+      <span><i class="legend-line flow"></i>확장 ↔ 기본</span>
+      <span><i class="legend-line dotted"></i>비슷한 문제</span>
     </div>
-    <canvas id="graph"></canvas>
-    <aside class="graph-side" id="side" hidden></aside>
-    <p class="graph-hint">점을 누르면 그 문제를 볼 수 있어요. 끌어서 옮기고, 빈 곳을 끌면 화면이 움직여요.</p>
+
+    <aside class="glass graph-side" id="side" hidden></aside>
   </main>
 
   <script type="module" src="graph.js"></script>

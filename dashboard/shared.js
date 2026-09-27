@@ -29,20 +29,21 @@ export async function requireUser() {
   return session.user;
 }
 
-// 내 기록, 정리한 풀이, 연결, 연습장 문제를 모아 문제 목록을 만든다.
+// 내 기록, 정리한 풀이, 연결, 연습장 문제, 분류를 모아 문제 목록을 만든다.
 // fullSolutions: 코드 본문까지 필요하면 true (코드 정리창). 지도에서는 개수만 세면 된다.
 export async function loadProblems({ fullSolutions = false } = {}) {
-  const [subs, solutions, links, ojProblems] = await Promise.all([
+  const [subs, solutions, links, ojProblems, categories] = await Promise.all([
     sb.from('submissions').select('judge,problem_id,problem_title,verdict,submitted_at').then((r) => r.data ?? []),
     sb.from('solutions').select(fullSolutions ? '*' : 'id,judge,problem_id,problem_title,title').then((r) => r.data ?? []),
     sb.from('problem_links').select('*').then((r) => r.data ?? []),
     sb.from('oj_problems').select('id,title').then((r) => r.data ?? []),
+    sb.from('problem_categories').select('judge,problem_id,category').then((r) => r.data ?? []),
   ]);
 
   const map = new Map();
   const touch = (judge, id, title) => {
     const key = problemKey(judge, id);
-    if (!map.has(key)) map.set(key, { key, judge, id: String(id), title: title || '', solved: false, tried: false, solutions: 0, links: 0 });
+    if (!map.has(key)) map.set(key, { key, judge, id: String(id), title: title || '', category: null, solved: false, tried: false, solutions: 0, links: 0 });
     const p = map.get(key);
     if (title && !p.title) p.title = title;
     return p;
@@ -59,6 +60,11 @@ export async function loadProblems({ fullSolutions = false } = {}) {
   for (const l of links) {
     touch(l.from_judge, l.from_problem, l.from_title).links += 1;
     touch(l.to_judge, l.to_problem, l.to_title).links += 1;
+  }
+
+  for (const c of categories) {
+    const p = map.get(problemKey(c.judge, c.problem_id));
+    if (p) p.category = c.category;
   }
 
   const problems = [...map.values()].sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? '') || Number(a.id) - Number(b.id));
