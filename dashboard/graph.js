@@ -1,7 +1,7 @@
 // 문제 지도: 문제를 점으로, 분류(DP, 정렬 등)를 큰 구슬로 그린다.
 // 분류 구슬이 자기 문제들을 끌어당겨 무리를 짓고, 문제끼리의 연결은 흐르는 선으로 보여준다.
 import {
-  $, esc, sb, requireUser, loadProblems, linksOf, LINK_KINDS, problemUrl, problemKey, shortLabel, JUDGE_LABEL,
+  $, esc, sb, requireUser, loadProblems, linksOf, LINK_KINDS, problemUrl, problemKey, shortLabel, JUDGE_LABEL, categoryColors,
 } from './shared.js';
 
 await requireUser();
@@ -13,14 +13,7 @@ const css = getComputedStyle(document.documentElement);
 const token = (name, fallback) => (css.getPropertyValue(name).trim() || fallback);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// 분류 색. 해결/미해결 색(초록, 빨강)과 헷갈리지 않는 색만 쓴다.
-const CATEGORY_COLORS = ['#8b5cf6', '#ec4899', '#0ea5e9', '#f59e0b', '#6366f1', '#14b8a6', '#f97316', '#d946ef'];
-const categoryColor = new Map();
-function assignColors() {
-  [...new Set(problems.map((p) => p.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko'))
-    .forEach((name, i) => categoryColor.set(name, CATEGORY_COLORS[i % CATEGORY_COLORS.length]));
-}
-assignColors();
+let categoryColor = categoryColors(problems);
 
 let nodes = [];
 let edges = [];
@@ -662,7 +655,7 @@ async function watchJob(id) {
       toast(`Claude가 새 문제 ${problems.filter((p) => !p.category).length}개를 정리하는 중…`, { spin: true });
     } else if (job.status === 'done') {
       ({ problems, links } = await loadProblems());
-      assignColors();
+      categoryColor = categoryColors(problems);
       autoFit = true;
       build();
       const r = job.result ?? {};

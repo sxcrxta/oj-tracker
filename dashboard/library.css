@@ -9,7 +9,27 @@
 .side { position: sticky; top: 16px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
 .side .card-head { margin-bottom: 8px; }
 .side #filter { width: 110px; }
-.problem-list { overflow-y: auto; display: grid; gap: 2px; }
+.problem-list { overflow-y: auto; display: grid; gap: 6px; align-content: start; }
+/* 분류 묶음 */
+.pgroup { border-radius: 8px; }
+.pgroup summary { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer;
+  list-style: none; user-select: none; font-size: 13px; font-weight: 600; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.pgroup summary::-webkit-details-marker { display: none; }
+.pgroup summary::after { content: ''; margin-left: 2px; width: 6px; height: 6px; border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; order: 3; }
+.pgroup[open] summary::after { transform: rotate(45deg); }
+.pgroup summary:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.gdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.gname { flex: 1; }
+.gcount { font-size: 11px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; order: 2; }
+.gitems { display: grid; gap: 2px; padding: 2px 0 2px 10px; margin-left: 12px; border-left: 1px solid var(--line); }
+.pstatus { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.pstatus.ac { background: var(--ac); }
+.pstatus.wa { background: var(--wa); }
+.pstatus.none { border: 1.5px solid var(--muted); width: 7px; height: 7px; }
+.cat-chip { display: inline-flex; align-items: center; gap: 5px; margin-left: 6px; padding: 1px 9px; border-radius: 999px;
+  border: 1px solid var(--line); font-size: 12px; font-weight: 500; vertical-align: 2px; }
+@media (prefers-reduced-motion: reduce) { .pgroup summary::after { transition: none; } }
 .problem { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%;
   text-align: left; border: 0; background: none; color: inherit; font: inherit; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
 .problem:hover { background: color-mix(in srgb, var(--fg) 6%, transparent); }

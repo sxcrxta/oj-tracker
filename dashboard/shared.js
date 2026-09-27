@@ -14,6 +14,13 @@ export const problemUrl = (judge, id) => (judge === 'self'
 export const problemKey = (judge, id) => `${judge}:${id}`;
 export const shortLabel = (judge, id) => `${judge === 'self' ? '연습장 ' : ''}#${id}`;
 
+// 분류 색. 지도와 코드 정리가 같은 색을 쓴다. 해결/미해결 색(초록, 빨강)과 헷갈리지 않는 색만 쓴다.
+const CATEGORY_COLORS = ['#8b5cf6', '#ec4899', '#0ea5e9', '#f59e0b', '#6366f1', '#14b8a6', '#f97316', '#d946ef'];
+export const categoryNames = (problems) => [...new Set(problems.map((p) => p.category).filter(Boolean))]
+  .sort((a, b) => a.localeCompare(b, 'ko'));
+export const categoryColors = (problems) => new Map(categoryNames(problems)
+  .map((name, i) => [name, CATEGORY_COLORS[i % CATEGORY_COLORS.length]]));
+
 export const LINK_KINDS = { extends: '확장 버전', base: '기본 버전', similar: '비슷한 문제' };
 // 확장과 기본은 서로 짝이다. 반대 방향에서 볼 때 관계 이름을 뒤집는다.
 export const flipKind = (kind) => ({ extends: 'base', base: 'extends', similar: 'similar' }[kind]);

@@ -1,7 +1,7 @@
-// 코드 정리창: 문제 하나에 여러 풀이를 저장하고, 문제끼리 연결한다.
+// 코드 정리창: 문제 하나에 여러 풀이를 저장한다. 문제 목록은 분류별로 묶어 보여준다.
 import {
   sb, $, esc, fmtTime, requireUser, loadProblems, linksOf,
-  JUDGE_LABEL, LINK_KINDS, problemUrl, problemKey, shortLabel,
+  JUDGE_LABEL, LINK_KINDS, problemUrl, problemKey, shortLabel, categoryColors,
 } from './shared.js';
 
 const user = await requireUser();
@@ -11,6 +11,15 @@ let links = [];
 let current = null;      // 지금 보고 있는 문제
 let editing = null;      // 편집 중인 풀이 (새로 만들면 null)
 let explainTimer = null;
+let colors = new Map();  // 분류 → 색 (지도와 같다)
+const UNCATEGORIZED = '분류 없음';
+const COLLAPSED_KEY = 'library.collapsed';
+const collapsed = new Set((() => {
+  try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]'); } catch { return []; }
+})());
+const saveCollapsed = () => {
+  try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed])); } catch { /* 저장 못 해도 괜찮다 */ }
+};
 
 const params = new URLSearchParams(location.search);
 
@@ -19,6 +28,7 @@ async function refresh(keepSelection = true) {
   problems = data.problems;
   solutions = data.solutions;
   links = data.links;
+  colors = categoryColors(problems);
   renderList();
   if (keepSelection && current) {
     const p = problems.find((x) => x.key === current.key);
@@ -27,21 +37,58 @@ async function refresh(keepSelection = true) {
 }
 
 // ---------- 문제 목록 ----------
+const statusClass = (p) => (p.solved ? 'ac' : p.tried ? 'wa' : 'none');
+
+function problemRow(p) {
+  return `
+    <button class="problem ${current?.key === p.key ? 'on' : ''}" data-key="${esc(p.key)}">
+      <span class="pname"><i class="pstatus ${statusClass(p)}" aria-hidden="true"></i>${p.judge === 'self' ? '<span class="tag">연습장</span>' : ''}<span class="pid">#${esc(p.id)}</span> ${esc(p.title)}</span>
+      <span class="counts">${p.solutions ? `<span class="count">풀이 ${p.solutions}</span>` : ''}${p.links ? `<span class="count">연결 ${p.links}</span>` : ''}</span>
+    </button>`;
+}
+
 function renderList() {
   const q = $('filter').value.trim().toLowerCase();
   const rows = problems.filter((p) => !q || p.id.includes(q) || p.title.toLowerCase().includes(q)
-    || (JUDGE_LABEL[p.judge] ?? '').toLowerCase().includes(q));
-  $('problem-list').innerHTML = rows.map((p) => `
-    <button class="problem ${current?.key === p.key ? 'on' : ''}" data-key="${esc(p.key)}">
-      <span class="pname">${p.judge === 'self' ? '<span class="tag">연습장</span>' : ''}<span class="pid">#${esc(p.id)}</span> ${esc(p.title)}</span>
-      <span class="counts">${p.solutions ? `<span class="count">풀이 ${p.solutions}</span>` : ''}${p.links ? `<span class="count">연결 ${p.links}</span>` : ''}</span>
-    </button>`).join('') || '<p class="muted small">문제가 없어요.</p>';
+    || (JUDGE_LABEL[p.judge] ?? '').toLowerCase().includes(q) || (p.category ?? '').toLowerCase().includes(q));
+
+  // 분류별로 묶는다. 분류 이름순, 분류 없는 문제는 맨 아래.
+  const groups = new Map([...colors.keys()].map((name) => [name, []]));
+  for (const p of rows) {
+    const name = p.category ?? UNCATEGORIZED;
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(p);
+  }
+  if (groups.has(UNCATEGORIZED)) { const rest = groups.get(UNCATEGORIZED); groups.delete(UNCATEGORIZED); groups.set(UNCATEGORIZED, rest); }
+
+  $('problem-list').innerHTML = [...groups].filter(([, list]) => list.length).map(([name, list]) => {
+    // 찾는 중이거나 지금 보는 문제가 들어 있으면 접혀 있어도 펼친다.
+    const open = q || !collapsed.has(name) || list.some((p) => p.key === current?.key);
+    const solved = list.filter((p) => p.solved).length;
+    return `
+      <details class="pgroup" data-group="${esc(name)}" ${open ? 'open' : ''}>
+        <summary>
+          <i class="gdot" style="background:${colors.get(name) ?? 'var(--muted)'}"></i>
+          <span class="gname">${esc(name)}</span>
+          <span class="gcount">${solved}/${list.length}</span>
+        </summary>
+        <div class="gitems">${list.map(problemRow).join('')}</div>
+      </details>`;
+  }).join('') || '<p class="muted small">문제가 없어요.</p>';
 }
 $('filter').addEventListener('input', renderList);
 $('problem-list').addEventListener('click', (e) => {
   const b = e.target.closest('[data-key]');
   if (b) select(problems.find((p) => p.key === b.dataset.key));
 });
+// 접고 편 상태를 기억한다 (찾는 중에 자동으로 펼친 것은 기억하지 않는다).
+$('problem-list').addEventListener('toggle', (e) => {
+  const g = e.target.closest?.('[data-group]');
+  if (!g || $('filter').value.trim()) return;
+  if (g.open) collapsed.delete(g.dataset.group);
+  else collapsed.add(g.dataset.group);
+  saveCollapsed();
+}, true);
 
 // ---------- 문제 상세 ----------
 function select(p, pushUrl = true) {
@@ -53,7 +100,8 @@ function select(p, pushUrl = true) {
     const url = `?judge=${encodeURIComponent(p.judge)}&problem=${encodeURIComponent(p.id)}`;
     history.replaceState(null, '', url);
   }
-  $('problem-title').innerHTML = `${p.judge === 'self' ? '<span class="tag">연습장</span>' : ''}<span class="pid">#${esc(p.id)}</span> ${esc(p.title)}`;
+  $('problem-title').innerHTML = `${p.judge === 'self' ? '<span class="tag">연습장</span>' : ''}<span class="pid">#${esc(p.id)}</span> ${esc(p.title)}${p.category
+    ? ` <span class="cat-chip"><i class="gdot" style="background:${colors.get(p.category)}"></i>${esc(p.category)}</span>` : ''}`;
   $('problem-link').href = problemUrl(p.judge, p.id);
   $('graph-link').href = `/graph.html?focus=${encodeURIComponent(p.key)}`;
   renderLinks();
