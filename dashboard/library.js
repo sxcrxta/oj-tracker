@@ -138,10 +138,12 @@ function highlight(code, lang = 'cpp') {
 function renderSolutions() {
   const mine = solutionsOf(current).filter((s) => typeof s.code === 'string');
   $('solution-count').textContent = mine.length ? `${mine.length}개` : '';
-  $('solutions').innerHTML = mine.length ? mine.map((s) => `
+  // 풀이가 하나뿐이면 이름 없이 코드를 바로 보여주고, 둘 이상일 때만 이름으로 구분한다.
+  const single = mine.length === 1;
+  $('solutions').innerHTML = mine.length ? mine.map((s, i) => `
     <article class="solution">
       <div class="solution-head">
-        <b>${esc(s.title || '(이름 없음)')}</b>
+        ${single ? '' : `<b>${esc(s.title || `풀이 ${i + 1}`)}</b>`}
         ${s.complexity ? `<span class="pill muted">${esc(s.complexity)}</span>` : ''}
         ${s.explain_status === 'queued' || s.explain_status === 'running' ? '<span class="pill busy">Claude가 설명 쓰는 중…</span>' : ''}
         <span style="flex:1"></span>
@@ -150,8 +152,10 @@ function renderSolutions() {
       </div>
       ${s.approach ? `<p>${esc(s.approach)}</p>` : ''}
       ${s.note ? `<p class="muted small note">${esc(s.note)}</p>` : ''}
-      <details><summary class="muted small">코드 보기 (${s.code.split('\n').length}줄)</summary>
-        <pre><code class="hljs language-${esc(s.language)}">${highlight(s.code, s.language)}</code></pre></details>
+      ${single
+        ? `<pre><code class="hljs language-${esc(s.language)}">${highlight(s.code, s.language)}</code></pre>`
+        : `<details><summary class="muted small">코드 보기 (${s.code.split('\n').length}줄)</summary>
+        <pre><code class="hljs language-${esc(s.language)}">${highlight(s.code, s.language)}</code></pre></details>`}
       <div class="muted small">${fmtTime(s.updated_at ?? s.created_at)}${s.source_submission_id ? ' · 제출에서 가져옴' : ''}</div>
     </article>`).join('') : '<p class="muted small">아직 정리한 풀이가 없어요. 같은 문제를 다른 방법으로 푼 코드를 모아두면 나중에 비교하기 좋아요.</p>';
 
@@ -186,6 +190,8 @@ async function openEditor(solution) {
   editing = solution;
   $('editor-title').textContent = solution ? '풀이 수정' : '풀이 추가';
   $('s-title').value = solution?.title ?? '';
+  // 이 문제의 유일한 풀이라면 이름은 필요 없다.
+  $('s-title-label').hidden = !solutionsOf(current).some((s) => s.id !== solution?.id);
   $('s-code').value = solution?.code ?? '';
   $('s-approach').value = solution?.approach ?? '';
   $('s-complexity').value = solution?.complexity ?? '';
