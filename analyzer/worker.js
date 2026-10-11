@@ -294,15 +294,16 @@ async function processHint() {
 const MAP_BATCH = 12; // Claude 한 번에 보낼 문제 수
 
 async function organizeMap() {
-  const [subs, ojProblems, solutions, categories, links] = await Promise.all([
+  const [subs, saved, ojProblems, solutions, categories, links] = await Promise.all([
     db('submissions?select=judge,problem_id,problem_title,verdict,source_code,submitted_at&order=submitted_at.desc'),
+    db('problems?select=judge,problem_id,title'),
     db('oj_problems?select=id,title'),
     db('solutions?select=judge,problem_id,problem_title,code&order=updated_at.desc'),
     db('problem_categories?select=judge,problem_id,category'),
     db('problem_links?select=from_judge,from_problem,to_judge,to_problem,kind'),
   ]);
 
-  // 지도에 나오는 문제와 같은 범위: 내 제출, 연습장 문제, 정리한 풀이, 연결에 나온 문제.
+  // 지도에 나오는 문제와 같은 범위: 내 제출, 저장한 문제 설명, 연습장 문제, 정리한 풀이, 연결에 나온 문제.
   const all = new Map();
   const touch = (judge, id, title) => {
     const key = `${judge}:${id}`;
@@ -312,6 +313,7 @@ async function organizeMap() {
     return p;
   };
   for (const p of ojProblems) touch('self', p.id, p.title);
+  for (const p of saved) touch(p.judge, p.problem_id, p.title);
   for (const s of subs) { // 최근 것부터. 맞은 코드가 있으면 그걸, 없으면 가장 최근 코드를 쓴다.
     const p = touch(s.judge, s.problem_id, s.problem_title);
     if (!s.source_code) continue;

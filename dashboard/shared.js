@@ -36,11 +36,12 @@ export async function requireUser() {
   return session.user;
 }
 
-// 내 기록, 정리한 풀이, 연결, 연습장 문제, 분류를 모아 문제 목록을 만든다.
+// 내 기록, 저장한 문제 설명(아직 안 푼 문제 포함), 정리한 풀이, 연결, 연습장 문제, 분류를 모아 문제 목록을 만든다.
 // fullSolutions: 코드 본문까지 필요하면 true (코드 정리창). 지도에서는 개수만 세면 된다.
 export async function loadProblems({ fullSolutions = false } = {}) {
-  const [subs, solutions, links, ojProblems, categories] = await Promise.all([
+  const [subs, saved, solutions, links, ojProblems, categories] = await Promise.all([
     sb.from('submissions').select('judge,problem_id,problem_title,verdict,submitted_at').then((r) => r.data ?? []),
+    sb.from('problems').select('judge,problem_id,title').then((r) => r.data ?? []),
     sb.from('solutions').select(fullSolutions ? '*' : 'id,judge,problem_id,problem_title,title').then((r) => r.data ?? []),
     sb.from('problem_links').select('*').then((r) => r.data ?? []),
     sb.from('oj_problems').select('id,title').then((r) => r.data ?? []),
@@ -57,6 +58,7 @@ export async function loadProblems({ fullSolutions = false } = {}) {
   };
 
   for (const p of ojProblems) touch('self', String(p.id), p.title);
+  for (const p of saved) touch(p.judge, p.problem_id, p.title);
   for (const s of subs) {
     const p = touch(s.judge, s.problem_id, s.problem_title);
     p.tried = true;
