@@ -119,6 +119,7 @@ async function openProblem(id) {
   $('f-output').value = p.output_spec;
   $('f-examples').innerHTML = '';
   p.examples.forEach(exampleRow);
+  $('f-skeleton').value = p.skeleton ? JSON.stringify(p.skeleton, null, 2) : '';
   $('f-testcases').textContent = count
     ? `채점용 테스트케이스 ${count}개 (예제와 별개). 테스트케이스는 Claude 워커가 만든 것을 그대로 써요.`
     : '채점용 테스트케이스가 없어요. 테스트케이스가 없으면 제출은 예제만으로 채점돼요.';
@@ -136,6 +137,13 @@ $('edit-form').addEventListener('submit', async (e) => {
   const examples = [...document.querySelectorAll('.example-row')].map((row) => ({
     input: row.querySelector('.ex-in').value, output: row.querySelector('.ex-out').value,
   }));
+  let skeleton = null;
+  if ($('f-skeleton').value.trim()) {
+    try {
+      skeleton = JSON.parse($('f-skeleton').value);
+      if (typeof skeleton.template !== 'string' || !Array.isArray(skeleton.blanks)) throw new Error('template(문자열)과 blanks(배열)가 있어야 해요');
+    } catch (err) { alert(`빈칸 채우기 틀이 올바르지 않아요: ${err.message}`); return; }
+  }
   const patch = {
     title: $('f-title').value.trim(),
     difficulty: $('f-difficulty').value.trim() || null,
@@ -146,6 +154,7 @@ $('edit-form').addEventListener('submit', async (e) => {
     input_spec: $('f-input').value,
     output_spec: $('f-output').value,
     examples,
+    skeleton,
     updated_at: new Date().toISOString(),
   };
   const { error } = await sb.from('oj_problems').update(patch).eq('id', current.id);

@@ -14,6 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { claudeCli } from './providers.js';
 import { generateProblem } from './problem-gen.js';
+import { statementText } from '../dashboard/oj/fill.js';
 import {
   HINT_SYSTEM, LEVEL_SCHEMA, CODE_SCHEMA, levelPrompt, codePrompt, normalizeLevelHint, normalizeCodeHint,
 } from '../supabase/functions/_shared/hints.js';
@@ -241,7 +242,7 @@ async function loadProblemForHint(judge, problemId) {
   if (!p) return null;
   return {
     judge, problem_id: String(p.id), title: p.title,
-    statement: `${p.statement}\n\n## 입력\n\n${p.input_spec}\n\n## 출력\n\n${p.output_spec}`,
+    statement: statementText(p),
     statement_has_images: false, examples: p.examples,
     time_limit_ms: p.time_limit_ms, memory_limit_kb: p.memory_limit_kb,
   };

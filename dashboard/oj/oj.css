@@ -8,7 +8,7 @@
 .small { font-size: 12px; }
 a { color: var(--accent); }
 
-.page-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.page-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .page-head h1 { font-size: 20px; margin: 0; text-wrap: balance; }
 .limits { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 13px; }
 .tags { display: inline-flex; gap: 4px; flex-wrap: wrap; }
@@ -47,6 +47,24 @@ pre.plain { background: #1e1e22; color: #e4e4e7; padding: 10px 12px; white-space
 .hint.failed { border-left-color: var(--wa); }
 .hint .where { font-weight: 600; }
 
+/* 빈칸 채우기: 코드가 길어서 문제와 코드를 위아래로 놓는다 */
+.fill-mode .solve { grid-template-columns: 1fr; }
+.fill-mode .editor-card { position: static; }
+.fill { display: grid; gap: 10px; }
+.fill-nav { position: sticky; top: 66px; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 0; background: var(--surface); border-bottom: 1px solid var(--line); }
+.fill-nav a { font-size: 13px; text-decoration: none; color: var(--muted); padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.fill-nav a.done { color: var(--ac); border-color: currentColor; }
+.fill-sheet { display: grid; gap: 0; }
+.fill-sheet pre.fixed { margin: 0; padding: 4px 12px; font: 13px/20px Menlo, Monaco, "Courier New", monospace; overflow-x: auto; color: var(--fg); opacity: .85; }
+.blank { border: 1.5px solid var(--accent); border-radius: 8px; margin: 4px 0 4px 24px; overflow: hidden; scroll-margin-top: 120px; }
+.blank-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 6px 10px; font-size: 13px; background: color-mix(in srgb, var(--accent) 8%, transparent); border-bottom: 1px solid var(--line); }
+.blank-guide { flex-basis: 100%; color: var(--muted); line-height: 1.5; }
+.blank-guide summary { cursor: pointer; font-size: 12px; width: fit-content; }
+.blank-guide summary:hover { color: var(--fg); }
+.blank-guide p { margin: 4px 0 2px; }
+.blank-editor { min-height: 92px; }
+.blank .monaco-editor .overflow-guard { border-radius: 0; }
+
 /* 관리 */
 .form { display: grid; gap: 10px; }
 .form label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
@@ -64,6 +82,7 @@ pre.plain { background: #1e1e22; color: #e4e4e7; padding: 10px 12px; white-space
   .solve, .admin-layout { grid-template-columns: 1fr; }
   .editor-card { position: static; }
   .editor { height: 340px; }
+  .blank { margin-left: 0; }
 }
 @media (max-width: 560px) {
   .ex, .grid2, .grid3 { grid-template-columns: 1fr; }

@@ -1,6 +1,7 @@
 import { sb, $, esc, fmtTime, fmtMem, verdictName, verdictClass, requireUser, renderMarkdown } from './common.js';
 import { judge, warm, TIME_FACTOR } from './judge.js';
-import { createEditor } from './editor.js';
+import { createEditor, colorize } from './editor.js';
+import { splitTemplate, assemble, mapCompileOutput, statementText } from './fill.js';
 
 const TEMPLATE = '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n\n    return 0;\n}\n';
 
@@ -25,8 +26,8 @@ $('page-links').innerHTML = `
   <a href="/library.html?judge=self&problem=${problem.id}">코드 정리</a>
   <a href="/graph.html?focus=self:${problem.id}">연결 지도</a>`;
 
-const fullStatement = `${problem.statement}\n\n## 입력\n\n${problem.input_spec}\n\n## 출력\n\n${problem.output_spec}`;
-renderMarkdown($('statement'), fullStatement);
+const fullStatement = statementText(problem);
+renderMarkdown($('statement'), `${problem.statement}\n\n## 입력\n\n${problem.input_spec}\n\n## 출력\n\n${problem.output_spec}`);
 $('examples').innerHTML = problem.examples.map((e, i) => `
   <div class="ex">
     <div><div class="label">예제 입력 ${i + 1}</div><pre>${esc(e.input)}</pre></div>
@@ -34,17 +35,95 @@ $('examples').innerHTML = problem.examples.map((e, i) => `
   </div>`).join('') || '<p class="muted">예제가 없어요.</p>';
 
 // ---------- 편집기 ----------
-const draftKey = `oj-draft-${id}`;
-let draft = null;
-try { draft = localStorage.getItem(draftKey); } catch {}
+// getCode()는 채점할 전체 코드와, 빈칸 채우기 문제면 줄 위치 정보와 비어 있는 빈칸 목록을 돌려준다.
+const fill = problem.skeleton;
+const blankTitles = Object.fromEntries((fill?.blanks ?? []).map((b) => [b.id, b.title]));
 let saveTimer = null;
-const editor = await createEditor($('code'), {
-  value: draft ?? TEMPLATE,
-  onChange: (code) => {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => { try { localStorage.setItem(draftKey, code); } catch {} }, 400);
-  },
-});
+const saveLater = (key, value) => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { try { localStorage.setItem(key, value); } catch {} }, 400);
+};
+const getCode = fill ? await setupFill() : await setupEditor();
+
+async function setupEditor() {
+  const draftKey = `oj-draft-${id}`;
+  let draft = null;
+  try { draft = localStorage.getItem(draftKey); } catch {}
+  const editor = await createEditor($('code'), { value: draft ?? TEMPLATE, onChange: (code) => saveLater(draftKey, code) });
+  return () => ({ source: editor.getValue(), lines: null, missing: [] });
+}
+
+// 빈칸 채우기: 주어진 코드는 읽기 전용으로 보여주고, 빈칸마다 작은 편집기를 둔다.
+async function setupFill() {
+  document.body.classList.add('fill-mode');
+  $('code').hidden = true;
+  $('fill').hidden = false;
+  const draftKey = `oj-fill-draft-${id}`;
+  let values = {};
+  try { values = JSON.parse(localStorage.getItem(draftKey) ?? '{}'); } catch {}
+
+  const parts = splitTemplate(fill.template);
+  const blanks = parts.filter((x) => x.type === 'blank');
+  const info = (bid) => fill.blanks.find((b) => b.id === bid) ?? { id: bid, title: bid, guide: '' };
+  const filled = (bid) => (values[bid] ?? '').trim() !== '';
+
+  $('fill').innerHTML = `
+    <div class="fill-nav" id="fill-nav"></div>
+    <div class="fill-sheet">${parts.map((x) => (x.type === 'code'
+      ? `<pre class="fixed"><code>${esc(x.code)}</code></pre>`
+      : `<div class="blank" id="blank-${x.id}">
+          <div class="blank-head"><b>빈칸 ${blanks.indexOf(x) + 1} · ${esc(info(x.id).title)}</b>
+            ${info(x.id).guide ? `<details class="blank-guide"><summary>설명 보기</summary><p>${esc(info(x.id).guide)}</p></details>` : ''}</div>
+          <div class="blank-editor"></div>
+        </div>`)).join('')}</div>
+    <div class="actions"><button type="button" class="ghost small" id="fill-show">합친 전체 코드 보기</button></div>
+    <pre class="plain" id="fill-full" hidden></pre>`;
+
+  const renderNav = () => {
+    $('fill-nav').innerHTML = blanks.map((x, i) => `<a href="#blank-${x.id}" class="${filled(x.id) ? 'done' : ''}">
+      ${filled(x.id) ? '●' : '○'} ${i + 1}. ${esc(info(x.id).title)}</a>`).join('')
+      + `<span class="muted small">${blanks.filter((x) => filled(x.id)).length} / ${blanks.length} 채움</span>`;
+  };
+  renderNav();
+
+  for (const x of blanks) {
+    await createEditor($(`blank-${x.id}`).querySelector('.blank-editor'), {
+      value: values[x.id] ?? '', inline: true, minLines: 4,
+      onChange: (code) => {
+        values[x.id] = code;
+        saveLater(draftKey, JSON.stringify(values));
+        renderNav();
+        $('fill-full').hidden = true;
+      },
+    });
+  }
+
+  // 주어진 코드는 편집기와 같은 색으로 칠한다 (편집기를 만든 뒤라야 테마 색이 잡힌다).
+  const fixed = [...$('fill').querySelectorAll('pre.fixed code')];
+  const codes = parts.filter((x) => x.type === 'code');
+  await Promise.all(fixed.map(async (el, i) => { el.innerHTML = await colorize(codes[i].code); }));
+
+  $('fill-show').addEventListener('click', () => {
+    const el = $('fill-full');
+    el.hidden = !el.hidden;
+    if (!el.hidden) el.textContent = assemble(fill.template, values).source;
+  });
+
+  return () => ({
+    ...assemble(fill.template, values),
+    missing: blanks.filter((x) => !filled(x.id)).map((x) => info(x.id).title),
+  });
+}
+
+// 빈칸이 남아 있으면 채점하지 않는다.
+function readyCode() {
+  const code = getCode();
+  if (code.missing.length) {
+    showResult(`<div class="msg err">아직 비어 있는 빈칸이 있어요: ${code.missing.map(esc).join(', ')}</div>`);
+    return null;
+  }
+  return code;
+}
 
 // 컴파일러를 미리 받아둔다. 채점을 누르기 전에 대부분 끝나 있게.
 warm((text) => { $('compiler').textContent = text; }, () => { $('compiler').textContent = '컴파일러 준비됨'; });
@@ -74,7 +153,7 @@ function progressView(text, done, total) {
   showResult(`<div class="muted">${esc(text)}</div>${total ? `<div class="bar"><span style="width:${(done / total) * 100}%"></span></div><div class="muted small">${done} / ${total}</div>` : ''}`);
 }
 
-function resultView(r, { examples = false } = {}) {
+function resultView(r, { examples = false, lines = null } = {}) {
   const failed = r.results.find((x) => x.verdict !== 'Accepted');
   const label = examples ? (r.verdict === 'Accepted' ? '예제를 모두 통과했어요' : verdictName(r.verdict)) : verdictName(r.verdict);
   let html = `<div class="big ${verdictClass(r.verdict)}">${esc(label)}</div>`;
@@ -86,7 +165,7 @@ function resultView(r, { examples = false } = {}) {
     const ex = problem.examples[failed.index];
     html += `<div class="ex" style="margin-top:8px"><div><div class="label">내 출력</div><pre>${esc(failed.stdout ?? '')}</pre></div><div><div class="label">기대 출력</div><pre>${esc(ex.output)}</pre></div></div>`;
   }
-  if (r.compileOutput) html += `<pre class="plain">${esc(r.compileOutput)}</pre>`;
+  if (r.compileOutput) html += `<pre class="plain">${esc(lines ? mapCompileOutput(r.compileOutput, lines, blankTitles) : r.compileOutput)}</pre>`;
   return html;
 }
 
@@ -96,23 +175,27 @@ function setBusy(busy) {
 }
 
 $('run-examples').addEventListener('click', async () => {
+  const code = readyCode();
+  if (!code) return;
   setBusy(true);
   try {
     const r = await judge({
-      source: editor.getValue(), testcases: problem.examples,
+      source: code.source, testcases: problem.examples,
       timeLimitMs: problem.time_limit_ms, memoryLimitKb: problem.memory_limit_kb, keepOutput: true,
       onStatus: (t) => progressView(t),
       onCase: (_res, total) => progressView('예제 실행 중…', _res.index + 1, total),
     });
-    showResult(resultView(r, { examples: true }));
+    showResult(resultView(r, { examples: true, lines: code.lines }));
   } finally {
     setBusy(false);
   }
 });
 
 $('submit').addEventListener('click', async () => {
+  const code = readyCode();
+  if (!code) return;
   setBusy(true);
-  const source = editor.getValue();
+  const { source } = code;
   const submittedAt = new Date().toISOString();
   try {
     progressView('테스트케이스를 받는 중…');
@@ -124,8 +207,8 @@ $('submit').addEventListener('click', async () => {
       onStatus: (t) => progressView(t),
       onCase: (res, total) => progressView('채점 중…', res.index + 1, total),
     });
-    if (r.verdict === 'JudgeError') { showResult(resultView(r)); return; }
-    showResult(resultView(r));
+    showResult(resultView(r, { lines: code.lines }));
+    if (r.verdict === 'JudgeError') return;
     await saveSubmission(source, submittedAt, r, cases.length);
     loadMine();
   } catch (e) {
@@ -234,8 +317,8 @@ $('hint-next').addEventListener('click', () => {
   requestHint({ kind: 'level', level: (levels.at(-1)?.level ?? 0) + 1 });
 });
 $('hint-code').addEventListener('click', () => {
-  const code = editor.getValue().trim();
-  if (code.length < 20) { alert('코드를 조금 더 쓴 뒤에 눌러주세요.'); return; }
+  const code = getCode().source.trim();
+  if (fill ? getCode().missing.length === fill.blanks.length : code.length < 20) { alert('코드를 조금 더 쓴 뒤에 눌러주세요.'); return; }
   requestHint({ kind: 'code', code });
 });
 

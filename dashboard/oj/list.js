@@ -3,7 +3,7 @@ import { sb, $, esc, requireUser } from './common.js';
 await requireUser();
 
 const [{ data: problems, error }, { data: mine }] = await Promise.all([
-  sb.from('oj_problems').select('id,title,difficulty,tags,published').order('id'),
+  sb.from('oj_problems').select('id,title,difficulty,tags,published,skeleton').order('id'),
   sb.from('submissions').select('problem_id,verdict').eq('judge', 'self'),
 ]);
 if (error) alert(`문제를 불러오지 못했어요: ${error.message}`);
@@ -23,7 +23,7 @@ function render() {
     const st = status.get(String(p.id));
     return `<tr data-id="${p.id}">
       <td class="num">${p.id}</td>
-      <td>${esc(p.title)} ${!p.published ? '<span class="pill draft">비공개</span>' : ''}</td>
+      <td>${esc(p.title)} ${p.skeleton ? '<span class="pill muted">빈칸 채우기</span>' : ''} ${!p.published ? '<span class="pill draft">비공개</span>' : ''}</td>
       <td class="muted">${esc(p.difficulty ?? '')}</td>
       <td><span class="tags">${p.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</span></td>
       <td>${st === 'solved' ? '<span class="badge v-Accepted">해결</span>' : st === 'tried' ? '<span class="badge v-WrongAnswer">시도</span>' : ''}</td>

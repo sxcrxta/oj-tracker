@@ -33,7 +33,8 @@ const darkTheme = () => {
 };
 
 // container 안에 편집기를 만든다. { getValue, setValue, focus, layout }를 돌려준다.
-export async function createEditor(container, { value = '', language = 'cpp', onChange } = {}) {
+// inline: 빈칸 채우기용. 미니맵 없이, 내용 길이에 맞춰 높이가 늘고, 휠은 페이지를 스크롤한다.
+export async function createEditor(container, { value = '', language = 'cpp', onChange, inline = false, minLines = 3 } = {}) {
   const monaco = await loadMonaco();
   const editor = monaco.editor.create(container, {
     value,
@@ -58,7 +59,21 @@ export async function createEditor(container, { value = '', language = 'cpp', on
     bracketPairColorization: { enabled: true },
     suggestOnTriggerCharacters: true,
     quickSuggestions: true,
+    ...(inline && {
+      minimap: { enabled: false },
+      scrollbar: { vertical: 'hidden', alwaysConsumeMouseWheel: false },
+      overviewRulerLanes: 0,
+      hideCursorInOverviewRuler: true,
+      renderLineHighlight: 'none',
+      padding: { top: 6, bottom: 6 },
+    }),
   });
+
+  if (inline) {
+    const fit = () => { container.style.height = `${Math.max(editor.getContentHeight(), minLines * 20 + 12)}px`; };
+    editor.onDidContentSizeChange(fit);
+    fit();
+  }
 
   if (onChange) editor.onDidChangeModelContent(() => onChange(editor.getValue()));
 
@@ -73,3 +88,10 @@ export async function createEditor(container, { value = '', language = 'cpp', on
     layout: () => editor.layout(),
   };
 }
+
+// 읽기 전용 코드를 편집기와 같은 색으로 칠한 HTML로 만든다.
+export async function colorize(code, language = 'cpp') {
+  const monaco = await loadMonaco();
+  return monaco.editor.colorize(code, language, { tabSize: 4 });
+}
+

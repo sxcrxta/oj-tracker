@@ -66,6 +66,9 @@
           </div>
           <div id="f-examples"></div>
           <button type="button" id="add-example">예제 추가</button>
+          <label>빈칸 채우기 틀 (JSON, 비우면 일반 문제)
+            <textarea id="f-skeleton" placeholder='{ "template": "...한 줄 전체가 {{id}}인 줄이 빈칸...", "blanks": [{ "id": "...", "title": "...", "guide": "..." }] }'></textarea>
+          </label>
           <p class="muted small" id="f-testcases"></p>
           <details id="f-private" hidden><summary>정답 코드와 생성기 (관리자만 보임)</summary><pre class="plain" id="f-solution"></pre><pre class="plain" id="f-generator"></pre><p class="muted small" id="f-notes"></p></details>
           <div class="actions"><span style="flex:1"></span><button type="button" class="danger" id="edit-delete" data-label="문제 삭제">문제 삭제</button></div>
